@@ -90,6 +90,14 @@ export const MAX_OUTLET_COUNT = 8;
 /** 콘센트 아이콘의 화면 반지름(px) — 확대/축소와 무관하게 항상 일정한 크기로 표시 */
 export const OUTLET_ICON_RADIUS_PX = 9;
 
+/** --- 동선 기본값 --- */
+export const PATH_HIT_TOLERANCE_PX = 8;
+export const PATH_ENDPOINT_HANDLE_RADIUS_PX = 6;
+export const ARROW_HEAD_LENGTH_MM = 220;
+export const ARROW_HEAD_WIDTH_MM = 160;
+/** 이보다 짧은 동선은 생성하지 않는다 (같은 자리 실수 클릭 방지). */
+export const MIN_PATH_LENGTH_MM = 100;
+
 export const COLORS = {
   background: '#f5f6f8',
   gridMinor: '#e4e6eb',
@@ -135,4 +143,8 @@ export const COLORS = {
   outletStroke: '#4a4f58',
   outletSelected: '#1d4fc4',
   outletText: '#1f2937',
+
+  path: '#9a4fd6',
+  pathSelected: '#1d4fc4',
+  pathHandle: '#ffffff',
 } as const;

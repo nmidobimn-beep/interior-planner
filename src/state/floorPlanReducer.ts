@@ -3,9 +3,10 @@ import type { Wall } from '../types/wall';
 import type { Door, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
 import type { Layer } from '../types/layer';
+import type { Path } from '../types/path';
 import { createHistoryReducer } from './history';
 
-export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet';
+export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
 
 /** 새 프로젝트에 항상 존재하는 첫 레이어의 고정 id (마지막 레이어는 삭제할 수 없어 항상 최소 1개 존재). */
@@ -21,6 +22,7 @@ export interface FloorPlanState {
   doors: Door[];
   windows: WindowOpening[];
   outlets: Outlet[];
+  paths: Path[];
   layers: Layer[];
   activeLayerId: string;
   selectedObject: SelectedObject;
@@ -32,6 +34,7 @@ export const initialFloorPlanState: FloorPlanState = {
   doors: [],
   windows: [],
   outlets: [],
+  paths: [],
   layers: [{ id: DEFAULT_LAYER_ID, name: '레이어 1', visible: true }],
   activeLayerId: DEFAULT_LAYER_ID,
   selectedObject: null,
@@ -53,6 +56,9 @@ export type FloorPlanAction =
   | { type: 'ADD_OUTLET'; outlet: Outlet }
   | { type: 'UPDATE_OUTLET'; id: string; patch: Partial<Omit<Outlet, 'id'>> }
   | { type: 'DELETE_OUTLET'; id: string }
+  | { type: 'ADD_PATH'; path: Path }
+  | { type: 'UPDATE_PATH'; id: string; patch: Partial<Omit<Path, 'id'>> }
+  | { type: 'DELETE_PATH'; id: string }
   | { type: 'SELECT_OBJECT'; selection: SelectedObject }
   | { type: 'ADD_LAYER'; layer: Layer }
   | { type: 'RENAME_LAYER'; id: string; name: string }
@@ -152,6 +158,19 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         selectedObject: clearSelectionIfMatches(state, 'outlet', action.id),
       };
 
+    case 'ADD_PATH':
+      return { ...state, paths: [...state.paths, action.path], selectedObject: { kind: 'path', id: action.path.id } };
+
+    case 'UPDATE_PATH':
+      return { ...state, paths: state.paths.map((path) => (path.id === action.id ? { ...path, ...action.patch } : path)) };
+
+    case 'DELETE_PATH':
+      return {
+        ...state,
+        paths: state.paths.filter((path) => path.id !== action.id),
+        selectedObject: clearSelectionIfMatches(state, 'path', action.id),
+      };
+
     case 'SELECT_OBJECT':
       return { ...state, selectedObject: action.selection };
 
@@ -181,6 +200,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         doors: reassign(state.doors),
         windows: reassign(state.windows),
         outlets: reassign(state.outlets),
+        paths: reassign(state.paths),
       };
     }
 
@@ -199,6 +219,8 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
           return { ...state, windows: state.windows.map((w) => (w.id === action.id ? { ...w, layerId: action.layerId } : w)) };
         case 'outlet':
           return { ...state, outlets: state.outlets.map((o) => (o.id === action.id ? { ...o, layerId: action.layerId } : o)) };
+        case 'path':
+          return { ...state, paths: state.paths.map((p) => (p.id === action.id ? { ...p, layerId: action.layerId } : p)) };
         default:
           return state;
       }

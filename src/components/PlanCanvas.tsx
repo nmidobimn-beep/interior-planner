@@ -6,6 +6,7 @@ import { drawDemoScene } from '../core/demoScene';
 import { drawSnapIndicator, drawWallPreview, drawWalls } from '../core/renderWalls';
 import { drawFurniture } from '../core/renderFurniture';
 import { drawDoors, drawOutlets, drawWindows } from '../core/renderOpenings';
+import { drawPathPreview, drawPaths } from '../core/renderPath';
 import type { UseViewportResult } from '../hooks/useViewport';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
@@ -30,11 +31,13 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     visibleDoors: doors,
     visibleWindows: windows,
     visibleOutlets: outlets,
+    visiblePaths: paths,
     selectedWall,
     selectedFurniture,
     selectedDoor,
     selectedWindow,
     selectedOutlet,
+    selectedPath,
   } = floorPlan;
   const {
     activeTool,
@@ -79,9 +82,11 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     drawWindows(ctx, viewport, windows, walls, selectedWindow?.id ?? null);
     drawFurniture(ctx, viewport, furniture, selectedFurniture?.id ?? null);
     drawOutlets(ctx, viewport, outlets, selectedOutlet?.id ?? null);
+    drawPaths(ctx, viewport, paths, selectedPath?.id ?? null);
 
     if (chainStart && previewPoint) {
-      drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm);
+      if (activeTool === 'path') drawPathPreview(ctx, viewport, chainStart, previewPoint);
+      else drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm);
     }
     if (previewPoint) {
       drawSnapIndicator(ctx, viewport, previewPoint, previewSnapKind);
@@ -97,11 +102,14 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     doors,
     windows,
     outlets,
+    paths,
     selectedWall,
     selectedFurniture,
     selectedDoor,
     selectedWindow,
     selectedOutlet,
+    selectedPath,
+    activeTool,
     chainStart,
     previewPoint,
     previewSnapKind,

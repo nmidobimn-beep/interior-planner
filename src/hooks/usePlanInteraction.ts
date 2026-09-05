@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
+import type { Path } from '../types/path';
 import type { FurnitureShape } from '../types/furniture';
 import {
   DEFAULT_ARM_THICKNESS_MM,
@@ -10,8 +11,11 @@ import {
   DEFAULT_WALL_THICKNESS_MM,
   DEFAULT_WINDOW_WIDTH_MM,
   FURNITURE_HANDLE_RADIUS_PX,
+  MIN_PATH_LENGTH_MM,
   MIN_WALL_LENGTH_MM,
   OPENING_WALL_HIT_TOLERANCE_PX,
+  PATH_ENDPOINT_HANDLE_RADIUS_PX,
+  PATH_HIT_TOLERANCE_PX,
   WALL_ENDPOINT_HANDLE_RADIUS_PX,
   WALL_HIT_TOLERANCE_PX,
 } from '../config/constants';
@@ -28,9 +32,12 @@ import {
 } from '../core/wallGeometry';
 import { hitTestFurnitureList, rotationHandleWorldPoint } from '../core/furnitureGeometry';
 import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from '../core/openingGeometry';
+import { hitTestPaths } from '../core/pathGeometry';
 import type { UseFloorPlanResult } from './useFloorPlan';
 
-export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet';
+export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet' | 'path';
+
+type PathEndpointKey = 'start' | 'end';
 
 type DragState =
   | { type: 'pan'; lastClient: Point }
@@ -40,7 +47,9 @@ type DragState =
   | { type: 'rotateFurniture'; furnitureId: string }
   | { type: 'moveDoor'; doorId: string }
   | { type: 'moveWindow'; windowId: string }
-  | { type: 'moveOutlet'; outletId: string; original: Point; grabWorld: Point };
+  | { type: 'moveOutlet'; outletId: string; original: Point; grabWorld: Point }
+  | { type: 'movePath'; pathId: string; original: { start: Point; end: Point }; grabWorld: Point }
+  | { type: 'pathEndpointDrag'; pathId: string; key: PathEndpointKey };
 
 interface UsePlanInteractionArgs {
   viewport: Viewport;
@@ -64,8 +73,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     visibleDoors: doors,
     visibleWindows: windows,
     visibleOutlets: outlets,
+    visiblePaths: paths,
     selectedWall,
     selectedFurniture,
+    selectedPath,
     addWall,
     updateWall,
     addFurniture,
@@ -76,11 +87,14 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     updateWindow,
     addOutlet,
     updateOutlet,
+    addPath,
+    updatePath,
     selectWall,
     selectFurniture,
     selectDoor,
     selectWindow,
     selectOutlet,
+    selectPath,
     deselect,
     deleteSelected,
     copySelected,
@@ -177,6 +191,26 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (activeTool === 'path') {
+        const candidatePoints = collectEndpoints(walls);
+        if (!chainStart) {
+          const snapped = snapPoint(worldRaw, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
+          setChainStart(snapped.point);
+        } else {
+          const snapped = snapPoint(worldRaw, {
+            origin: chainStart,
+            candidatePoints,
+            scale: viewport.scale,
+            enabled: snapEnabled,
+          });
+          if (distance(chainStart, snapped.point) >= MIN_PATH_LENGTH_MM) {
+            addPath(chainStart, snapped.point);
+            setActiveTool('select');
+          }
+        }
+        return;
+      }
+
       // --- 선택 도구 ---
       if (selectedFurniture) {
         const handleScreen = worldToScreen(viewport, rotationHandleWorldPoint(selectedFurniture));
@@ -198,6 +232,22 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         }
         if (distance(screen, endScreen) <= handleTolerance) {
           dragState.current = { type: 'endpointDrag', wallId: selectedWall.id, key: 'end' };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
+
+      if (selectedPath) {
+        const startScreen = worldToScreen(viewport, selectedPath.start);
+        const endScreen = worldToScreen(viewport, selectedPath.end);
+        const handleTolerance = PATH_ENDPOINT_HANDLE_RADIUS_PX * 1.5;
+        if (distance(screen, startScreen) <= handleTolerance) {
+          dragState.current = { type: 'pathEndpointDrag', pathId: selectedPath.id, key: 'start' };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+        if (distance(screen, endScreen) <= handleTolerance) {
+          dragState.current = { type: 'pathEndpointDrag', pathId: selectedPath.id, key: 'end' };
           e.currentTarget.setPointerCapture(e.pointerId);
           return;
         }
@@ -246,6 +296,19 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      const hitPath = hitTestPaths(worldRaw, paths, PATH_HIT_TOLERANCE_PX / viewport.scale);
+      if (hitPath) {
+        selectPath(hitPath.id);
+        dragState.current = {
+          type: 'movePath',
+          pathId: hitPath.id,
+          original: { start: hitPath.start, end: hitPath.end },
+          grabWorld: worldRaw,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
       const hitWall = hitTestWalls(worldRaw, walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
       if (hitWall) {
         selectWall(hitWall.id);
@@ -263,6 +326,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       addDoor,
       addFurniture,
       addOutlet,
+      addPath,
       addWall,
       addWindow,
       chainStart,
@@ -272,12 +336,15 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       furniture,
       getScreenPoint,
       outlets,
+      paths,
       selectDoor,
       selectFurniture,
       selectOutlet,
+      selectPath,
       selectWall,
       selectWindow,
       selectedFurniture,
+      selectedPath,
       selectedWall,
       setActiveTool,
       snapEnabled,
@@ -375,7 +442,33 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
-      if (activeTool === 'wall' && chainStart) {
+      if (drag?.type === 'movePath') {
+        const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
+        const rawStart = { x: drag.original.start.x + rawDelta.x, y: drag.original.start.y + rawDelta.y };
+        const snapped = snapPoint(rawStart, { scale: viewport.scale, enabled: snapEnabled });
+        const actualDelta = { x: snapped.point.x - drag.original.start.x, y: snapped.point.y - drag.original.start.y };
+        updatePath(drag.pathId, {
+          start: snapped.point,
+          end: { x: drag.original.end.x + actualDelta.x, y: drag.original.end.y + actualDelta.y },
+        });
+        setPreviewPoint(snapped.point);
+        setPreviewSnapKind(snapped.kind);
+        return;
+      }
+
+      if (drag?.type === 'pathEndpointDrag') {
+        const path = paths.find((p) => p.id === drag.pathId);
+        if (!path) return;
+        const other = drag.key === 'start' ? path.end : path.start;
+        const candidatePoints = collectEndpoints(walls);
+        const snapped = snapPoint(worldRaw, { origin: other, candidatePoints, scale: viewport.scale, enabled: snapEnabled });
+        updatePath(drag.pathId, { [drag.key]: snapped.point } as Partial<Path>);
+        setPreviewPoint(snapped.point);
+        setPreviewSnapKind(snapped.kind);
+        return;
+      }
+
+      if ((activeTool === 'wall' || activeTool === 'path') && chainStart) {
         const candidatePoints = collectEndpoints(walls);
         const snapped = snapPoint(worldRaw, {
           origin: chainStart,
@@ -394,10 +487,12 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       furniture,
       getScreenPoint,
       panBy,
+      paths,
       snapEnabled,
       updateDoor,
       updateFurniture,
       updateOutlet,
+      updatePath,
       updateWall,
       updateWindow,
       viewport,

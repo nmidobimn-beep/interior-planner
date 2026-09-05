@@ -241,7 +241,8 @@
 .plan-canvas--lshape,
 .plan-canvas--door,
 .plan-canvas--window,
-.plan-canvas--outlet {
+.plan-canvas--outlet,
+.plan-canvas--path {
   cursor: crosshair;
 }
 

@@ -53,11 +53,13 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
     selectedDoor,
     selectedWindow,
     selectedOutlet,
+    selectedPath,
     updateWall,
     updateFurniture,
     updateDoor,
     updateWindow,
     updateOutlet,
+    updatePath,
     moveObjectToLayer,
     deleteSelected,
   } = floorPlan;
@@ -408,6 +410,46 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           콘센트 삭제
+        </button>
+      </>
+    );
+  }
+
+  if (selectedPath) {
+    return (
+      <>
+        <div className="side-panel-title">동선 속성</div>
+
+        <label className="field-row">
+          <span>화살표 표시</span>
+          <input
+            type="checkbox"
+            checked={selectedPath.showArrow}
+            onChange={(e) => updatePath(selectedPath.id, { showArrow: e.target.checked })}
+          />
+        </label>
+
+        <div className="field-row field-row--stacked">
+          <label htmlFor="path-memo">메모</label>
+          <textarea
+            id="path-memo"
+            rows={2}
+            placeholder="예: 현관 → 거실"
+            value={selectedPath.memo ?? ''}
+            onChange={(e) => updatePath(selectedPath.id, { memo: e.target.value })}
+          />
+        </div>
+
+        <LayerField
+          kind="path"
+          objectId={selectedPath.id}
+          layerId={selectedPath.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          동선 삭제
         </button>
       </>
     );

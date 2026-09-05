@@ -5,6 +5,7 @@ import type { Furniture, FurnitureShape } from '../types/furniture';
 import type { Door, HingeSide, SwingDirection, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
 import type { Layer } from '../types/layer';
+import type { Path } from '../types/path';
 import { createId } from '../core/id';
 import { DEFAULT_FURNITURE_COLOR } from '../config/constants';
 import { clampOpeningOffset } from '../core/openingGeometry';
@@ -40,7 +41,8 @@ type ClipboardEntry =
   | { kind: 'furniture'; data: Furniture }
   | { kind: 'door'; data: Door }
   | { kind: 'window'; data: WindowOpening }
-  | { kind: 'outlet'; data: Outlet };
+  | { kind: 'outlet'; data: Outlet }
+  | { kind: 'path'; data: Path };
 
 const initialHistory: HistoryState<FloorPlanState> = { past: [], present: initialFloorPlanState, future: [] };
 
@@ -151,6 +153,23 @@ export function useFloorPlan() {
     dispatch({ type: 'DELETE_OUTLET', id });
   }, []);
 
+  const addPath = useCallback(
+    (start: Point, end: Point, showArrow = true): Path => {
+      const path: Path = { id: createId(), start, end, showArrow, layerId: state.activeLayerId };
+      dispatch({ type: 'ADD_PATH', path });
+      return path;
+    },
+    [state.activeLayerId],
+  );
+
+  const updatePath = useCallback((id: string, patch: Partial<Omit<Path, 'id'>>) => {
+    dispatch({ type: 'UPDATE_PATH', id, patch });
+  }, []);
+
+  const deletePath = useCallback((id: string) => {
+    dispatch({ type: 'DELETE_PATH', id });
+  }, []);
+
   const selectObject = useCallback((kind: ObjectKind, id: string | null) => {
     dispatch({ type: 'SELECT_OBJECT', selection: id ? { kind, id } : null });
   }, []);
@@ -159,6 +178,7 @@ export function useFloorPlan() {
   const selectDoor = useCallback((id: string | null) => selectObject('door', id), [selectObject]);
   const selectWindow = useCallback((id: string | null) => selectObject('window', id), [selectObject]);
   const selectOutlet = useCallback((id: string | null) => selectObject('outlet', id), [selectObject]);
+  const selectPath = useCallback((id: string | null) => selectObject('path', id), [selectObject]);
 
   const deselect = useCallback(() => {
     dispatch({ type: 'SELECT_OBJECT', selection: null });
@@ -183,8 +203,11 @@ export function useFloorPlan() {
       case 'outlet':
         deleteOutlet(selection.id);
         break;
+      case 'path':
+        deletePath(selection.id);
+        break;
     }
-  }, [deleteDoor, deleteFurniture, deleteOutlet, deleteWall, deleteWindow, state.selectedObject]);
+  }, [deleteDoor, deleteFurniture, deleteOutlet, deletePath, deleteWall, deleteWindow, state.selectedObject]);
 
   const selectedWall = useMemo(
     () => findSelected(state.selectedObject, 'wall', state.walls),
@@ -206,6 +229,10 @@ export function useFloorPlan() {
     () => findSelected(state.selectedObject, 'outlet', state.outlets),
     [state.outlets, state.selectedObject],
   );
+  const selectedPath = useMemo(
+    () => findSelected(state.selectedObject, 'path', state.paths),
+    [state.paths, state.selectedObject],
+  );
 
   const copySelected = useCallback(() => {
     if (selectedWall) setClipboard({ kind: 'wall', data: selectedWall });
@@ -213,7 +240,8 @@ export function useFloorPlan() {
     else if (selectedDoor) setClipboard({ kind: 'door', data: selectedDoor });
     else if (selectedWindow) setClipboard({ kind: 'window', data: selectedWindow });
     else if (selectedOutlet) setClipboard({ kind: 'outlet', data: selectedOutlet });
-  }, [selectedDoor, selectedFurniture, selectedOutlet, selectedWall, selectedWindow]);
+    else if (selectedPath) setClipboard({ kind: 'path', data: selectedPath });
+  }, [selectedDoor, selectedFurniture, selectedOutlet, selectedPath, selectedWall, selectedWindow]);
 
   const pasteClipboard = useCallback(() => {
     if (!clipboard) return;
@@ -263,8 +291,17 @@ export function useFloorPlan() {
         setClipboard({ kind: 'outlet', data: { ...o, x: center.x, y: center.y } });
         break;
       }
+      case 'path': {
+        const p = clipboard.data;
+        const start = { x: p.start.x + PASTE_OFFSET_MM, y: p.start.y + PASTE_OFFSET_MM };
+        const end = { x: p.end.x + PASTE_OFFSET_MM, y: p.end.y + PASTE_OFFSET_MM };
+        const created = addPath(start, end, p.showArrow);
+        if (p.memo) updatePath(created.id, { memo: p.memo });
+        setClipboard({ kind: 'path', data: { ...p, start, end } });
+        break;
+      }
     }
-  }, [addDoor, addFurniture, addOutlet, addWall, addWindow, clipboard, state.walls, updateFurniture, updateWindow]);
+  }, [addDoor, addFurniture, addOutlet, addPath, addWall, addWindow, clipboard, state.walls, updateFurniture, updatePath, updateWindow]);
 
   const undo = useCallback(() => dispatch(UNDO), []);
   const redo = useCallback(() => dispatch(REDO), []);
@@ -292,6 +329,7 @@ export function useFloorPlan() {
   const visibleDoors = useMemo(() => byVisibleLayer(state.doors, visibleLayerIds), [state.doors, visibleLayerIds]);
   const visibleWindows = useMemo(() => byVisibleLayer(state.windows, visibleLayerIds), [state.windows, visibleLayerIds]);
   const visibleOutlets = useMemo(() => byVisibleLayer(state.outlets, visibleLayerIds), [state.outlets, visibleLayerIds]);
+  const visiblePaths = useMemo(() => byVisibleLayer(state.paths, visibleLayerIds), [state.paths, visibleLayerIds]);
 
   return {
     walls: state.walls,
@@ -299,11 +337,13 @@ export function useFloorPlan() {
     doors: state.doors,
     windows: state.windows,
     outlets: state.outlets,
+    paths: state.paths,
     visibleWalls,
     visibleFurniture,
     visibleDoors,
     visibleWindows,
     visibleOutlets,
+    visiblePaths,
     layers: state.layers,
     activeLayerId: state.activeLayerId,
     selectedObject: state.selectedObject,
@@ -312,6 +352,7 @@ export function useFloorPlan() {
     selectedDoor,
     selectedWindow,
     selectedOutlet,
+    selectedPath,
     addWall,
     updateWall,
     deleteWall,
@@ -327,11 +368,15 @@ export function useFloorPlan() {
     addOutlet,
     updateOutlet,
     deleteOutlet,
+    addPath,
+    updatePath,
+    deletePath,
     selectWall,
     selectFurniture,
     selectDoor,
     selectWindow,
     selectOutlet,
+    selectPath,
     deselect,
     deleteSelected,
     canCopy: state.selectedObject !== null,

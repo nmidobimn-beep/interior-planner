@@ -22,6 +22,10 @@ const FURNITURE_TOOLS: { id: ToolId; label: string; hint: string }[] = [
   { id: 'lshape', label: 'ㄱ자', hint: '클릭한 위치에 ㄱ자(코너) 가구를 놓습니다' },
 ];
 
+const PATH_TOOLS: { id: ToolId; label: string; hint: string }[] = [
+  { id: 'path', label: '동선', hint: '클릭-클릭으로 이동 경로를 그립니다 (예: 현관 → 거실)' },
+];
+
 /** 왼쪽 도구 패널. 도구 전환과, 새로 그릴 벽의 기본 두께를 설정한다. */
 export function ToolPanel({ interaction }: ToolPanelProps) {
   const { activeTool, setActiveTool, defaultWallThicknessMm, setDefaultWallThicknessMm } = interaction;
@@ -71,8 +75,11 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
       <div className="side-panel-title">가구</div>
       {renderToolGroup(FURNITURE_TOOLS)}
 
+      <div className="side-panel-title">동선</div>
+      {renderToolGroup(PATH_TOOLS)}
+
       <div className="side-panel-title">앞으로 추가될 도구</div>
-      <div className="side-panel-placeholder">다각형 가구 · 동선 (5단계~)</div>
+      <div className="side-panel-placeholder">다각형 가구 · 저장/불러오기 (8단계~)</div>
     </>
   );
 }
