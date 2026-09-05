@@ -4,6 +4,7 @@ import { drawGrid } from '../core/grid';
 import { drawRulers } from '../core/ruler';
 import { drawDemoScene } from '../core/demoScene';
 import { drawSnapIndicator, drawWallPreview, drawWalls } from '../core/renderWalls';
+import { drawFurniture } from '../core/renderFurniture';
 import type { UseViewportResult } from '../hooks/useViewport';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
@@ -22,7 +23,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
   const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, onWheel } = viewportApi;
-  const { walls, selectedWallId } = floorPlan;
+  const { walls, furniture, selectedWall, selectedFurniture } = floorPlan;
   const {
     activeTool,
     defaultWallThicknessMm,
@@ -61,7 +62,9 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     drawGrid(ctx, viewport, size);
     if (showDemo) drawDemoScene(ctx, viewport);
 
-    drawWalls(ctx, viewport, walls, selectedWallId);
+    drawWalls(ctx, viewport, walls, selectedWall?.id ?? null);
+    drawFurniture(ctx, viewport, furniture, selectedFurniture?.id ?? null);
+
     if (chainStart && previewPoint) {
       drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm);
     }
@@ -70,7 +73,19 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     }
 
     drawRulers(ctx, viewport, size);
-  }, [viewport, size, showDemo, walls, selectedWallId, chainStart, previewPoint, previewSnapKind, defaultWallThicknessMm]);
+  }, [
+    viewport,
+    size,
+    showDemo,
+    walls,
+    furniture,
+    selectedWall,
+    selectedFurniture,
+    chainStart,
+    previewPoint,
+    previewSnapKind,
+    defaultWallThicknessMm,
+  ]);
 
   return (
     <div ref={containerRef} className="plan-canvas-container">

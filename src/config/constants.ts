@@ -53,6 +53,23 @@ export const SNAP_GRID_MM = 50;
 /** 이보다 짧은 벽은 생성하지 않는다 (같은 자리 실수 클릭 방지). */
 export const MIN_WALL_LENGTH_MM = 50;
 
+/** --- 가구 기본값 --- */
+export const MIN_FURNITURE_SIZE_MM = 50;
+export const MAX_FURNITURE_SIZE_MM = 10000;
+export const DEFAULT_ARM_THICKNESS_MM = 500;
+
+/** 도구별로 새로 놓을 가구의 기본 크기 (mm) */
+export const DEFAULT_FURNITURE_SIZE: Record<'rectangle' | 'circle' | 'lshape', { width: number; height: number }> = {
+  rectangle: { width: 800, height: 400 },
+  circle: { width: 800, height: 800 },
+  lshape: { width: 1800, height: 1800 },
+};
+
+/** 회전 손잡이가 도형 위쪽으로 떨어진 거리 (mm) */
+export const ROTATION_HANDLE_OFFSET_MM = 300;
+/** 회전/이동 손잡이의 화면 히트 반지름(px) */
+export const FURNITURE_HANDLE_RADIUS_PX = 7;
+
 export const COLORS = {
   background: '#f5f6f8',
   gridMinor: '#e4e6eb',
@@ -62,11 +79,12 @@ export const COLORS = {
   rulerBackground: '#ffffff',
   rulerBorder: '#d6d9e0',
   rulerText: '#5b6270',
-  roomStroke: '#8a8f9c',
-  roomFill: 'rgba(138, 143, 156, 0.06)',
-  furnitureStroke: '#2f6fed',
-  furnitureFill: 'rgba(47, 111, 237, 0.12)',
-  furnitureText: '#1f2937',
+
+  demoRoomStroke: '#8a8f9c',
+  demoRoomFill: 'rgba(138, 143, 156, 0.06)',
+  demoFurnitureStroke: '#2f6fed',
+  demoFurnitureFill: 'rgba(47, 111, 237, 0.12)',
+  demoFurnitureText: '#1f2937',
 
   wallFill: '#5b6270',
   wallStroke: '#3d4149',
@@ -76,6 +94,15 @@ export const COLORS = {
   wallHandleStroke: '#1d4fc4',
   wallPreview: 'rgba(47, 111, 237, 0.55)',
   wallLengthLabel: '#1f2937',
+
+  furnitureFill: 'rgba(47, 158, 111, 0.18)',
+  furnitureStroke: '#2f9e6f',
+  furnitureSelectedFill: 'rgba(47, 111, 237, 0.18)',
+  furnitureSelectedStroke: '#1d4fc4',
+  furnitureText: '#1f2937',
+  furnitureHandle: '#ffffff',
+  furnitureHandleStroke: '#1d4fc4',
+  furnitureRotateLine: '#1d4fc4',
 
   snapEndpoint: '#e0554f',
   snapAngle: '#e08a2f',

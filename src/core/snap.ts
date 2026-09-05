@@ -66,14 +66,23 @@ function snapToAngle(origin: Point, point: Point): Point | null {
   if (dist === 0) return null;
 
   const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const snapped = snapAngleDeg(angleDeg);
+  if (snapped === null) return null;
+
+  const rad = (snapped * Math.PI) / 180;
+  return { x: origin.x + Math.cos(rad) * dist, y: origin.y + Math.sin(rad) * dist };
+}
+
+/**
+ * 각도(도)가 "보기 좋은" 각도(0/45/90°...)에 허용오차 안으로 가까우면 그 각도로 스냅한다.
+ * 가구 회전 손잡이 드래그에도 그대로 재사용한다. 허용오차 밖이면 null(자유 각도 유지).
+ */
+export function snapAngleDeg(angleDeg: number): number | null {
   const normalized = ((angleDeg % 360) + 360) % 360;
 
   for (const step of SNAP_ANGLE_STEPS_DEG) {
     const diff = Math.min(Math.abs(normalized - step), 360 - Math.abs(normalized - step));
-    if (diff <= SNAP_ANGLE_TOLERANCE_DEG) {
-      const rad = (step * Math.PI) / 180;
-      return { x: origin.x + Math.cos(rad) * dist, y: origin.y + Math.sin(rad) * dist };
-    }
+    if (diff <= SNAP_ANGLE_TOLERANCE_DEG) return step;
   }
   return null;
 }

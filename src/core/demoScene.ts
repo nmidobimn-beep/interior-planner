@@ -49,13 +49,13 @@ function drawRoomRect(
   const w = bottomRight.x - topLeft.x;
   const h = bottomRight.y - topLeft.y;
 
-  ctx.fillStyle = isFurniture ? COLORS.furnitureFill : COLORS.roomFill;
-  ctx.strokeStyle = isFurniture ? COLORS.furnitureStroke : COLORS.roomStroke;
+  ctx.fillStyle = isFurniture ? COLORS.demoFurnitureFill : COLORS.demoRoomFill;
+  ctx.strokeStyle = isFurniture ? COLORS.demoFurnitureStroke : COLORS.demoRoomStroke;
   ctx.lineWidth = isFurniture ? 2 : 3;
   ctx.fillRect(topLeft.x, topLeft.y, w, h);
   ctx.strokeRect(topLeft.x, topLeft.y, w, h);
 
-  ctx.fillStyle = COLORS.furnitureText;
+  ctx.fillStyle = COLORS.demoFurnitureText;
   ctx.font = '12px system-ui, -apple-system, sans-serif';
   ctx.fillText(label, topLeft.x + 6, topLeft.y + 16);
 }

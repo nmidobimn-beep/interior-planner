@@ -1,11 +1,13 @@
 import type { Bounds } from '../types/geometry';
 import type { Wall } from '../types/wall';
+import type { Furniture } from '../types/furniture';
+import { furnitureBounds } from './furnitureGeometry';
 
 const EMPTY_PLAN_MARGIN_MM = 500;
 
-/** 벽들의 mm 경계 상자를 계산한다. 벽이 하나도 없으면 null. */
-export function computeWallsBounds(walls: Wall[]): Bounds | null {
-  if (walls.length === 0) return null;
+/** 벽·가구를 모두 포함하는 mm 경계 상자를 계산한다. 아무 객체도 없으면 null. */
+export function computePlanBounds(walls: Wall[], furniture: Furniture[]): Bounds | null {
+  if (walls.length === 0 && furniture.length === 0) return null;
 
   let minX = Infinity;
   let minY = Infinity;
@@ -20,6 +22,14 @@ export function computeWallsBounds(walls: Wall[]): Bounds | null {
       maxX = Math.max(maxX, point.x + half);
       maxY = Math.max(maxY, point.y + half);
     }
+  }
+
+  for (const item of furniture) {
+    const b = furnitureBounds(item);
+    minX = Math.min(minX, b.minX);
+    minY = Math.min(minY, b.minY);
+    maxX = Math.max(maxX, b.maxX);
+    maxY = Math.max(maxY, b.maxY);
   }
 
   return {

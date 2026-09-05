@@ -141,13 +141,28 @@
   color: var(--text-muted);
 }
 
-.field-row input[type='number'] {
+.field-row input[type='number'],
+.field-row input[type='text'] {
   width: 88px;
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font: inherit;
+}
+
+.field-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.field-row--stacked textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
 }
 
 .danger-button {
@@ -192,7 +207,10 @@
   cursor: grabbing;
 }
 
-.plan-canvas--wall {
+.plan-canvas--wall,
+.plan-canvas--rectangle,
+.plan-canvas--circle,
+.plan-canvas--lshape {
   cursor: crosshair;
 }
 
