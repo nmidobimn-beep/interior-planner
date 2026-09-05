@@ -4,12 +4,13 @@ import type { Furniture } from '../types/furniture';
 import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
+import type { Polygon } from '../types/polygon';
 import { furnitureBounds } from './furnitureGeometry';
 
 const EMPTY_PLAN_MARGIN_MM = 500;
 
 /**
- * 벽·가구·콘센트·동선·라벨을 모두 포함하는 mm 경계 상자를 계산한다. 아무 객체도 없으면 null.
+ * 벽·가구·콘센트·동선·라벨·다각형을 모두 포함하는 mm 경계 상자를 계산한다. 아무 객체도 없으면 null.
  * 문/창문은 항상 벽 위에 있으므로 벽의 경계에 이미 포함된다.
  */
 export function computePlanBounds(
@@ -18,13 +19,15 @@ export function computePlanBounds(
   outlets: Outlet[] = [],
   paths: Path[] = [],
   labels: TextLabel[] = [],
+  polygons: Polygon[] = [],
 ): Bounds | null {
   if (
     walls.length === 0 &&
     furniture.length === 0 &&
     outlets.length === 0 &&
     paths.length === 0 &&
-    labels.length === 0
+    labels.length === 0 &&
+    polygons.length === 0
   )
     return null;
 
@@ -72,6 +75,15 @@ export function computePlanBounds(
     minY = Math.min(minY, label.y);
     maxX = Math.max(maxX, label.x);
     maxY = Math.max(maxY, label.y);
+  }
+
+  for (const polygon of polygons) {
+    for (const point of polygon.points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
   }
 
   return {

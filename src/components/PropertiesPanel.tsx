@@ -59,6 +59,7 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selectedPolygon,
     selectionCount,
     updateWall,
     updateFurniture,
@@ -67,6 +68,7 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
     updateOutlet,
     updatePath,
     updateLabel,
+    updatePolygon,
     moveObjectToLayer,
     deleteSelected,
   } = floorPlan;
@@ -493,6 +495,58 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           텍스트 삭제
+        </button>
+      </>
+    );
+  }
+
+  if (selectedPolygon) {
+    return (
+      <>
+        <div className="side-panel-title">다각형 속성</div>
+
+        <div className="field-row">
+          <label htmlFor="polygon-name">이름</label>
+          <input
+            id="polygon-name"
+            type="text"
+            value={selectedPolygon.name}
+            onChange={(e) => updatePolygon(selectedPolygon.id, { name: e.target.value })}
+          />
+        </div>
+
+        <div className="field-row">
+          <label htmlFor="polygon-color">색상</label>
+          <input
+            id="polygon-color"
+            type="color"
+            value={selectedPolygon.color}
+            onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })}
+          />
+        </div>
+
+        <div className="field-row field-row--stacked">
+          <label htmlFor="polygon-memo">메모</label>
+          <textarea
+            id="polygon-memo"
+            rows={2}
+            value={selectedPolygon.memo ?? ''}
+            onChange={(e) => updatePolygon(selectedPolygon.id, { memo: e.target.value })}
+          />
+        </div>
+
+        <div className="side-panel-placeholder">꼭짓점 {selectedPolygon.points.length}개 — 선택 후 꼭짓점을 드래그해 모양을 바꿀 수 있습니다.</div>
+
+        <LayerField
+          kind="polygon"
+          objectId={selectedPolygon.id}
+          layerId={selectedPolygon.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          다각형 삭제
         </button>
       </>
     );

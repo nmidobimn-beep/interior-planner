@@ -4,6 +4,7 @@ import type { Door, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
+import type { Polygon } from '../types/polygon';
 import type { Layer } from '../types/layer';
 import type { FloorPlanState } from '../state/floorPlanReducer';
 
@@ -20,6 +21,7 @@ export interface FloorPlanDocument {
   outlets: Outlet[];
   paths: Path[];
   labels: TextLabel[];
+  polygons: Polygon[];
   layers: Layer[];
   activeLayerId: string;
 }
@@ -35,6 +37,7 @@ export function serializeFloorPlan(state: FloorPlanState): FloorPlanDocument {
     outlets: state.outlets,
     paths: state.paths,
     labels: state.labels,
+    polygons: state.polygons,
     layers: state.layers,
     activeLayerId: state.activeLayerId,
   };
@@ -56,8 +59,9 @@ export function parseFloorPlanDocument(input: unknown): FloorPlanDocument | null
 
   if (!isArray(doc.walls) || !isArray(doc.furniture) || !isArray(doc.doors) || !isArray(doc.windows)) return null;
   if (!isArray(doc.outlets) || !isArray(doc.paths) || !isArray(doc.layers) || doc.layers.length === 0) return null;
-  // labels는 이 기능이 없던 옛 파일에는 없을 수 있으므로 없으면 빈 배열로 취급한다(하위 호환).
+  // labels/polygons는 이 기능이 없던 옛 파일에는 없을 수 있으므로 없으면 빈 배열로 취급한다(하위 호환).
   if (doc.labels !== undefined && !isArray(doc.labels)) return null;
+  if (doc.polygons !== undefined && !isArray(doc.polygons)) return null;
 
   const layers = doc.layers as Layer[];
   const layerIds = new Set(layers.map((l) => l.id));
@@ -77,6 +81,7 @@ export function parseFloorPlanDocument(input: unknown): FloorPlanDocument | null
     outlets: normalizeLayerId(doc.outlets as Outlet[]),
     paths: normalizeLayerId(doc.paths as Path[]),
     labels: normalizeLayerId((doc.labels as TextLabel[]) ?? []),
+    polygons: normalizeLayerId((doc.polygons as Polygon[]) ?? []),
     layers,
     activeLayerId,
   };
@@ -91,6 +96,7 @@ export function documentToState(doc: FloorPlanDocument): FloorPlanState {
     outlets: doc.outlets,
     paths: doc.paths,
     labels: doc.labels ?? [],
+    polygons: doc.polygons ?? [],
     layers: doc.layers,
     activeLayerId: doc.activeLayerId,
     selection: [],

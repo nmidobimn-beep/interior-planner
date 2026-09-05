@@ -3,16 +3,18 @@ import type { Furniture } from '../types/furniture';
 import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
+import type { Polygon } from '../types/polygon';
 import type { ObjectKind, SelectionItem } from '../state/floorPlanReducer';
 import { furnitureBounds } from './furnitureGeometry';
+import { polygonBounds } from './polygonGeometry';
 
 /**
  * 다중 선택 기능이 지금 단계에서 다루는 객체 종류. 벽/문/창문 같은 구조 객체는
  * (요청에서 언급된 대로) 기존 단일 선택 구조를 그대로 유지하고 이번엔 포함하지 않는다.
  */
-export type MultiSelectableKind = 'furniture' | 'outlet' | 'path' | 'label';
+export type MultiSelectableKind = 'furniture' | 'outlet' | 'path' | 'label' | 'polygon';
 
-export const MULTI_SELECTABLE_KINDS: ReadonlySet<ObjectKind> = new Set<ObjectKind>(['furniture', 'outlet', 'path', 'label']);
+export const MULTI_SELECTABLE_KINDS: ReadonlySet<ObjectKind> = new Set<ObjectKind>(['furniture', 'outlet', 'path', 'label', 'polygon']);
 
 export function isMultiSelectable(kind: ObjectKind): kind is MultiSelectableKind {
   return MULTI_SELECTABLE_KINDS.has(kind);
@@ -23,6 +25,7 @@ interface SelectableData {
   outlets: Outlet[];
   paths: Path[];
   labels: TextLabel[];
+  polygons: Polygon[];
 }
 
 function pointBounds(p: Point): Bounds {
@@ -57,6 +60,10 @@ export function boundsForItem(item: SelectionItem, data: SelectableData): Bounds
     case 'path': {
       const p = data.paths.find((x) => x.id === item.id);
       return p ? pathBounds(p) : null;
+    }
+    case 'polygon': {
+      const p = data.polygons.find((x) => x.id === item.id);
+      return p ? polygonBounds(p) : null;
     }
     default:
       return null;
@@ -129,6 +136,7 @@ export function hitTestBoxSelection(start: Point, end: Point, data: SelectableDa
   for (const o of data.outlets) if (test(pointBounds(o), rect)) result.push({ kind: 'outlet', id: o.id });
   for (const l of data.labels) if (test(pointBounds(l), rect)) result.push({ kind: 'label', id: l.id });
   for (const p of data.paths) if (test(pathBounds(p), rect)) result.push({ kind: 'path', id: p.id });
+  for (const poly of data.polygons) if (test(polygonBounds(poly), rect)) result.push({ kind: 'polygon', id: poly.id });
 
   return result;
 }

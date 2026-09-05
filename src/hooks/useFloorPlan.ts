@@ -7,8 +7,9 @@ import type { Outlet } from '../types/outlet';
 import type { Layer } from '../types/layer';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
+import type { Polygon } from '../types/polygon';
 import { createId } from '../core/id';
-import { DEFAULT_FURNITURE_COLOR, DEFAULT_LABEL_TEXT } from '../config/constants';
+import { DEFAULT_FURNITURE_COLOR, DEFAULT_LABEL_TEXT, DEFAULT_POLYGON_COLOR, DEFAULT_POLYGON_NAME } from '../config/constants';
 import { clampOpeningOffset } from '../core/openingGeometry';
 import { wallLengthMm } from '../core/wallGeometry';
 import {
@@ -52,7 +53,8 @@ type ClipboardEntry =
   | { kind: 'window'; data: WindowOpening }
   | { kind: 'outlet'; data: Outlet }
   | { kind: 'path'; data: Path }
-  | { kind: 'label'; data: TextLabel };
+  | { kind: 'label'; data: TextLabel }
+  | { kind: 'polygon'; data: Polygon };
 
 const initialHistory: HistoryState<FloorPlanState> = { past: [], present: initialFloorPlanState, future: [] };
 
@@ -229,6 +231,23 @@ export function useFloorPlan() {
     dispatch({ type: 'DELETE_LABEL', id });
   }, []);
 
+  const addPolygon = useCallback(
+    (points: Point[]): Polygon => {
+      const polygon: Polygon = { id: createId(), points, name: DEFAULT_POLYGON_NAME, color: DEFAULT_POLYGON_COLOR, layerId: state.activeLayerId };
+      dispatch({ type: 'ADD_POLYGON', polygon });
+      return polygon;
+    },
+    [state.activeLayerId],
+  );
+
+  const updatePolygon = useCallback((id: string, patch: Partial<Omit<Polygon, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_POLYGON', id, patch, transient });
+  }, []);
+
+  const deletePolygon = useCallback((id: string) => {
+    dispatch({ type: 'DELETE_POLYGON', id });
+  }, []);
+
   const selectObject = useCallback((kind: ObjectKind, id: string | null) => {
     dispatch({ type: 'SELECT_OBJECT', selection: id ? { kind, id } : null });
   }, []);
@@ -239,6 +258,7 @@ export function useFloorPlan() {
   const selectOutlet = useCallback((id: string | null) => selectObject('outlet', id), [selectObject]);
   const selectPath = useCallback((id: string | null) => selectObject('path', id), [selectObject]);
   const selectLabel = useCallback((id: string | null) => selectObject('label', id), [selectObject]);
+  const selectPolygon = useCallback((id: string | null) => selectObject('polygon', id), [selectObject]);
 
   const deselect = useCallback(() => {
     dispatch({ type: 'SELECT_OBJECT', selection: null });
@@ -284,6 +304,7 @@ export function useFloorPlan() {
   const selectedOutlet = useMemo(() => findSelected(selectedObject, 'outlet', state.outlets), [state.outlets, selectedObject]);
   const selectedPath = useMemo(() => findSelected(selectedObject, 'path', state.paths), [state.paths, selectedObject]);
   const selectedLabel = useMemo(() => findSelected(selectedObject, 'label', state.labels), [state.labels, selectedObject]);
+  const selectedPolygon = useMemo(() => findSelected(selectedObject, 'polygon', state.polygons), [state.polygons, selectedObject]);
 
   const selectedFurnitureIds = useMemo(
     () => new Set(state.selection.filter((s) => s.kind === 'furniture').map((s) => s.id)),
@@ -298,6 +319,10 @@ export function useFloorPlan() {
     () => new Set(state.selection.filter((s) => s.kind === 'label').map((s) => s.id)),
     [state.selection],
   );
+  const selectedPolygonIds = useMemo(
+    () => new Set(state.selection.filter((s) => s.kind === 'polygon').map((s) => s.id)),
+    [state.selection],
+  );
 
   const copySelected = useCallback(() => {
     if (selectedWall) setClipboard({ kind: 'wall', data: selectedWall });
@@ -307,7 +332,8 @@ export function useFloorPlan() {
     else if (selectedOutlet) setClipboard({ kind: 'outlet', data: selectedOutlet });
     else if (selectedPath) setClipboard({ kind: 'path', data: selectedPath });
     else if (selectedLabel) setClipboard({ kind: 'label', data: selectedLabel });
-  }, [selectedDoor, selectedFurniture, selectedLabel, selectedOutlet, selectedPath, selectedWall, selectedWindow]);
+    else if (selectedPolygon) setClipboard({ kind: 'polygon', data: selectedPolygon });
+  }, [selectedDoor, selectedFurniture, selectedLabel, selectedOutlet, selectedPath, selectedPolygon, selectedWall, selectedWindow]);
 
   const pasteClipboard = useCallback(() => {
     if (!clipboard) return;
@@ -376,6 +402,14 @@ export function useFloorPlan() {
         setClipboard({ kind: 'label', data: { ...l, x: position.x, y: position.y } });
         break;
       }
+      case 'polygon': {
+        const poly = clipboard.data;
+        const points = poly.points.map((p) => ({ x: p.x + PASTE_OFFSET_MM, y: p.y + PASTE_OFFSET_MM }));
+        const created = addPolygon(points);
+        updatePolygon(created.id, { name: poly.name, color: poly.color, memo: poly.memo });
+        setClipboard({ kind: 'polygon', data: { ...poly, points } });
+        break;
+      }
     }
   }, [
     addDoor,
@@ -383,12 +417,14 @@ export function useFloorPlan() {
     addLabel,
     addOutlet,
     addPath,
+    addPolygon,
     addWall,
     addWindow,
     clipboard,
     state.walls,
     updateFurniture,
     updatePath,
+    updatePolygon,
     updateWindow,
   ]);
 
@@ -461,6 +497,7 @@ export function useFloorPlan() {
   const visibleOutlets = useMemo(() => byVisibleLayer(state.outlets, visibleLayerIds), [state.outlets, visibleLayerIds]);
   const visiblePaths = useMemo(() => byVisibleLayer(state.paths, visibleLayerIds), [state.paths, visibleLayerIds]);
   const visibleLabels = useMemo(() => byVisibleLayer(state.labels, visibleLayerIds), [state.labels, visibleLayerIds]);
+  const visiblePolygons = useMemo(() => byVisibleLayer(state.polygons, visibleLayerIds), [state.polygons, visibleLayerIds]);
 
   return {
     walls: state.walls,
@@ -470,6 +507,7 @@ export function useFloorPlan() {
     outlets: state.outlets,
     paths: state.paths,
     labels: state.labels,
+    polygons: state.polygons,
     visibleWalls,
     visibleFurniture,
     visibleDoors,
@@ -477,6 +515,7 @@ export function useFloorPlan() {
     visibleOutlets,
     visiblePaths,
     visibleLabels,
+    visiblePolygons,
     layers: state.layers,
     activeLayerId: state.activeLayerId,
     selectedObject,
@@ -487,6 +526,7 @@ export function useFloorPlan() {
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selectedPolygon,
     addWall,
     updateWall,
     deleteWall,
@@ -508,6 +548,9 @@ export function useFloorPlan() {
     addLabel,
     updateLabel,
     deleteLabel,
+    addPolygon,
+    updatePolygon,
+    deletePolygon,
     selectWall,
     selectFurniture,
     selectDoor,
@@ -515,6 +558,7 @@ export function useFloorPlan() {
     selectOutlet,
     selectPath,
     selectLabel,
+    selectPolygon,
     deselect,
     deleteSelected,
     selection: state.selection,
@@ -526,6 +570,7 @@ export function useFloorPlan() {
     selectedOutletIds,
     selectedPathIds,
     selectedLabelIds,
+    selectedPolygonIds,
     canCopy: selectedObject !== null,
     canPaste: clipboard !== null,
     copySelected,

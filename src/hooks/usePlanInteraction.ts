@@ -3,6 +3,7 @@ import type { Bounds, Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Path } from '../types/path';
 import type { Furniture, FurnitureShape } from '../types/furniture';
+import type { Polygon } from '../types/polygon';
 import type { ObjectKind, SelectionItem } from '../state/floorPlanReducer';
 import {
   DEFAULT_ARM_THICKNESS_MM,
@@ -19,10 +20,14 @@ import {
   FURNITURE_HANDLE_RADIUS_PX,
   LABEL_HIT_RADIUS_PX,
   MIN_PATH_LENGTH_MM,
+  MIN_POLYGON_VERTICES,
   MIN_WALL_LENGTH_MM,
   OPENING_WALL_HIT_TOLERANCE_PX,
   PATH_ENDPOINT_HANDLE_RADIUS_PX,
   PATH_HIT_TOLERANCE_PX,
+  POLYGON_CLOSE_HIT_RADIUS_PX,
+  POLYGON_EDGE_HIT_TOLERANCE_PX,
+  POLYGON_VERTEX_HANDLE_RADIUS_PX,
   WALL_ENDPOINT_HANDLE_RADIUS_PX,
   WALL_HIT_TOLERANCE_PX,
   type SnapCategoryFlags,
@@ -43,12 +48,13 @@ import { furnitureKeyPoints, hitTestFurnitureList, rotationHandleWorldPoint } fr
 import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from '../core/openingGeometry';
 import { defaultControlPoint, hitTestPaths, pathKeyPoints } from '../core/pathGeometry';
 import { hitTestLabels } from '../core/labelGeometry';
+import { hitTestPolygonVertex, hitTestPolygons, polygonBounds, polygonCentroid, polygonKeyPoints } from '../core/polygonGeometry';
 import { collectSnapCandidates, type SnapExclude } from '../core/snapPoints';
 import { computeSelectionBounds, hitTestBoxSelection, rotatePointAround, selectionKeyPoints } from '../core/multiSelectGeometry';
 import { groupRotationHandleWorldPoint } from '../core/renderSelection';
 import type { UseFloorPlanResult } from './useFloorPlan';
 
-export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet' | 'path' | 'label';
+export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet' | 'path' | 'label' | 'polygon';
 export type PathShape = 'straight' | 'curve';
 
 type PathEndpointKey = 'start' | 'end';
@@ -58,7 +64,8 @@ type SelectionMemberSnapshot =
   | { kind: 'furniture'; id: string; x: number; y: number; rotationDeg: number }
   | { kind: 'outlet'; id: string; x: number; y: number }
   | { kind: 'label'; id: string; x: number; y: number }
-  | { kind: 'path'; id: string; start: Point; end: Point; controlPoint?: Point };
+  | { kind: 'path'; id: string; start: Point; end: Point; controlPoint?: Point }
+  | { kind: 'polygon'; id: string; points: Point[] };
 
 type DragState =
   | { type: 'pan'; lastClient: Point }
@@ -74,6 +81,9 @@ type DragState =
   | { type: 'pathEndpointDrag'; pathId: string; key: PathEndpointKey; original: Point }
   | { type: 'curveControlDrag'; pathId: string; original: Point }
   | { type: 'moveLabel'; labelId: string; original: Point; grabWorld: Point }
+  | { type: 'movePolygon'; polygonId: string; original: Polygon; grabWorld: Point }
+  | { type: 'rotatePolygon'; polygonId: string; original: Point[]; pivot: Point; startAngleDeg: number }
+  | { type: 'polygonVertexDrag'; polygonId: string; vertexIndex: number; original: Point }
   | { type: 'moveSelection'; members: SelectionMemberSnapshot[]; initialBounds: Bounds | null; grabWorld: Point; clickedItem: SelectionItem }
   | { type: 'rotateSelection'; members: SelectionMemberSnapshot[]; pivot: Point; startAngleDeg: number };
 
@@ -100,6 +110,10 @@ function snapLengthAlong(origin: Point, point: Point, unitMm: number): Point {
 
 function pointsEqual(a: Point, b: Point): boolean {
   return a.x === b.x && a.y === b.y;
+}
+
+function pointArraysEqual(a: Point[], b: Point[]): boolean {
+  return a.length === b.length && a.every((p, i) => pointsEqual(p, b[i]));
 }
 
 function selectionKey(item: SelectionItem): string {
@@ -145,9 +159,11 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     visibleOutlets: outlets,
     visiblePaths: paths,
     visibleLabels: labels,
+    visiblePolygons: polygons,
     selectedWall,
     selectedFurniture,
     selectedPath,
+    selectedPolygon,
     selection,
     selectionCount,
     isSelected,
@@ -167,6 +183,8 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     updatePath,
     addLabel,
     updateLabel,
+    addPolygon,
+    updatePolygon,
     selectWall,
     selectFurniture,
     selectDoor,
@@ -174,6 +192,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     selectOutlet,
     selectPath,
     selectLabel,
+    selectPolygon,
     deselect,
     deleteSelected,
     copySelected,
@@ -202,6 +221,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   const [previewPoint, setPreviewPoint] = useState<Point | null>(null);
   const [previewSnapKind, setPreviewSnapKind] = useState<SnapKind>(null);
   const [selectionBox, setSelectionBox] = useState<{ start: Point; end: Point } | null>(null);
+  const [polygonDraft, setPolygonDraft] = useState<Point[]>([]);
 
   const dragState = useRef<DragState | null>(null);
 
@@ -209,11 +229,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     setActiveToolState(tool);
     setChainStart(null);
     setPreviewPoint(null);
+    setPolygonDraft([]);
   }, []);
 
   const endChain = useCallback(() => {
     setChainStart(null);
     setPreviewPoint(null);
+    setPolygonDraft([]);
   }, []);
 
   const getScreenPoint = useCallback((e: { clientX: number; clientY: number; currentTarget: HTMLElement }) => {
@@ -222,8 +244,9 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   }, []);
 
   const snapCandidates = useCallback(
-    (exclude?: SnapExclude) => collectSnapCandidates({ walls, furniture, doors, windows, outlets, paths, labels }, snapCategories, exclude),
-    [doors, furniture, labels, outlets, paths, snapCategories, walls, windows],
+    (exclude?: SnapExclude) =>
+      collectSnapCandidates({ walls, furniture, doors, windows, outlets, paths, labels, polygons }, snapCategories, exclude),
+    [doors, furniture, labels, outlets, paths, polygons, snapCategories, walls, windows],
   );
 
   /** 다중 선택 이동/회전 시작 시, 선택된 각 객체의 현재 상태를 스냅샷으로 캡처한다. */
@@ -243,11 +266,14 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         } else if (item.kind === 'path') {
           const p = paths.find((x) => x.id === item.id);
           if (p) result.push({ kind: 'path', id: p.id, start: p.start, end: p.end, controlPoint: p.controlPoint });
+        } else if (item.kind === 'polygon') {
+          const p = polygons.find((x) => x.id === item.id);
+          if (p) result.push({ kind: 'polygon', id: p.id, points: p.points });
         }
       }
       return result;
     },
-    [furniture, outlets, labels, paths],
+    [furniture, outlets, labels, paths, polygons],
   );
 
   const memberIdsByKind = useCallback((members: SelectionMemberSnapshot[], kind: ObjectKind) => {
@@ -260,8 +286,9 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       else if (item.kind === 'outlet') selectOutlet(item.id);
       else if (item.kind === 'path') selectPath(item.id);
       else if (item.kind === 'label') selectLabel(item.id);
+      else if (item.kind === 'polygon') selectPolygon(item.id);
     },
-    [selectFurniture, selectLabel, selectOutlet, selectPath],
+    [selectFurniture, selectLabel, selectOutlet, selectPath, selectPolygon],
   );
 
   const startMoveSelection = useCallback(
@@ -270,13 +297,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       if (members.length === 0) return false;
       // 실제(회전 반영) 바운딩 박스를 드래그 시작 시점에 한 번만 계산해둔다 — 평행 이동이므로
       // 드래그 도중에는 이 박스를 delta만큼 그대로 옮기면 된다(재계산 불필요).
-      const initialBounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels });
+      const initialBounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels, polygons });
       beginTransientEdit();
       dragState.current = { type: 'moveSelection', members, initialBounds, grabWorld: worldRaw, clickedItem };
       currentTarget.setPointerCapture(pointerId);
       return true;
     },
-    [beginTransientEdit, buildSelectionSnapshot, furniture, labels, outlets, paths, selection],
+    [beginTransientEdit, buildSelectionSnapshot, furniture, labels, outlets, paths, polygons, selection],
   );
 
   const onPointerDown = useCallback(
@@ -373,11 +400,29 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (activeTool === 'polygon') {
+        const candidatePoints = snapCandidates();
+        const snapped = snapPoint(worldRaw, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
+
+        // 꼭짓점이 3개 이상일 때 첫 꼭짓점 근처를 다시 클릭하면 도형을 닫아 완성한다.
+        if (polygonDraft.length >= MIN_POLYGON_VERTICES) {
+          const firstScreen = worldToScreen(viewport, polygonDraft[0]);
+          if (distance(screen, firstScreen) <= POLYGON_CLOSE_HIT_RADIUS_PX) {
+            addPolygon(polygonDraft);
+            setPolygonDraft([]);
+            setActiveTool('select');
+            return;
+          }
+        }
+        setPolygonDraft((prev) => [...prev, snapped.point]);
+        return;
+      }
+
       // --- 선택 도구 ---
 
       // 다중 선택(2개 이상) 중 그룹 회전 손잡이를 눌렀는지 먼저 확인한다.
       if (selectionCount > 1) {
-        const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels });
+        const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels, polygons });
         if (bounds) {
           const handleScreen = worldToScreen(viewport, groupRotationHandleWorldPoint(bounds));
           if (distance(screen, handleScreen) <= FURNITURE_HANDLE_RADIUS_PX * 1.5) {
@@ -446,6 +491,40 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         if (distance(screen, endScreen) <= handleTolerance) {
           beginTransientEdit();
           dragState.current = { type: 'pathEndpointDrag', pathId: selectedPath.id, key: 'end', original: selectedPath.end };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
+
+      // 다각형 하나만 선택된 경우: 회전 손잡이(바운딩 박스 위, 그룹 회전과 동일한 손잡이) 또는
+      // 꼭짓점 손잡이를 눌렀는지 먼저 확인한다(둘 다 본체 드래그보다 우선).
+      if (selectedPolygon) {
+        const bounds = polygonBounds(selectedPolygon);
+        const handleScreen = worldToScreen(viewport, groupRotationHandleWorldPoint(bounds));
+        if (distance(screen, handleScreen) <= FURNITURE_HANDLE_RADIUS_PX * 1.5) {
+          const centroid = polygonCentroid(selectedPolygon);
+          const startAngleDeg = (Math.atan2(worldRaw.y - centroid.y, worldRaw.x - centroid.x) * 180) / Math.PI;
+          beginTransientEdit();
+          dragState.current = {
+            type: 'rotatePolygon',
+            polygonId: selectedPolygon.id,
+            original: selectedPolygon.points,
+            pivot: centroid,
+            startAngleDeg,
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+
+        const vertexIndex = hitTestPolygonVertex(worldRaw, selectedPolygon, POLYGON_VERTEX_HANDLE_RADIUS_PX * 1.5 / viewport.scale);
+        if (vertexIndex !== null) {
+          beginTransientEdit();
+          dragState.current = {
+            type: 'polygonVertexDrag',
+            polygonId: selectedPolygon.id,
+            vertexIndex,
+            original: selectedPolygon.points[vertexIndex],
+          };
           e.currentTarget.setPointerCapture(e.pointerId);
           return;
         }
@@ -554,6 +633,27 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      const hitPolygon = hitTestPolygons(worldRaw, polygons, POLYGON_EDGE_HIT_TOLERANCE_PX / viewport.scale);
+      if (hitPolygon) {
+        if (e.shiftKey) {
+          toggleSelectObject('polygon', hitPolygon.id);
+          return;
+        }
+        if (isSelected('polygon', hitPolygon.id) && selectionCount > 1) {
+          if (startMoveSelection(worldRaw, e.currentTarget, e.pointerId, { kind: 'polygon', id: hitPolygon.id })) return;
+        }
+        selectPolygon(hitPolygon.id);
+        beginTransientEdit();
+        dragState.current = {
+          type: 'movePolygon',
+          polygonId: hitPolygon.id,
+          original: hitPolygon,
+          grabWorld: worldRaw,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
       const hitWall = hitTestWalls(worldRaw, walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
       if (hitWall) {
         selectWall(hitWall.id);
@@ -576,6 +676,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       addLabel,
       addOutlet,
       addPath,
+      addPolygon,
       addWall,
       addWindow,
       beginTransientEdit,
@@ -590,15 +691,19 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       outlets,
       pathShape,
       paths,
+      polygonDraft,
+      polygons,
       selectDoor,
       selectFurniture,
       selectLabel,
       selectOutlet,
       selectPath,
+      selectPolygon,
       selectWall,
       selectWindow,
       selectedFurniture,
       selectedPath,
+      selectedPolygon,
       selectedWall,
       selection,
       selectionCount,
@@ -763,6 +868,52 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (drag?.type === 'movePolygon') {
+        // 다각형 전체를 옮길 때는 모든 꼭짓점 + 각 변 중간점 + 중심을 스냅 후보로 검사한다.
+        const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
+        const candidatePoints = snapCandidates({ polygonId: drag.polygonId });
+        const snap = snapObjectDelta(
+          polygonKeyPoints(drag.original),
+          drag.original.points[0],
+          rawDelta,
+          candidatePoints,
+          viewport.scale,
+          snapEnabled,
+        );
+        const finalDelta = { x: rawDelta.x + snap.delta.x, y: rawDelta.y + snap.delta.y };
+        const newPoints = drag.original.points.map((p) => ({ x: p.x + finalDelta.x, y: p.y + finalDelta.y }));
+        updatePolygon(drag.polygonId, { points: newPoints }, true);
+        setPreviewPoint(newPoints[0]);
+        setPreviewSnapKind(snap.kind);
+        return;
+      }
+
+      if (drag?.type === 'rotatePolygon') {
+        const currentAngleDeg = (Math.atan2(worldRaw.y - drag.pivot.y, worldRaw.x - drag.pivot.x) * 180) / Math.PI;
+        let deltaDeg = currentAngleDeg - drag.startAngleDeg;
+        if (snapEnabled) {
+          const normalized = ((deltaDeg % 360) + 360) % 360;
+          const snappedAbs = snapAngleDeg(normalized);
+          if (snappedAbs !== null) deltaDeg = snappedAbs;
+        }
+        const newPoints = drag.original.map((p) => rotatePointAround(p, drag.pivot, deltaDeg));
+        updatePolygon(drag.polygonId, { points: newPoints }, true);
+        setPreviewSnapKind(null);
+        return;
+      }
+
+      if (drag?.type === 'polygonVertexDrag') {
+        const candidatePoints = snapCandidates({ polygonId: drag.polygonId });
+        const snapped = snapPoint(worldRaw, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
+        const polygon = polygons.find((p) => p.id === drag.polygonId);
+        if (!polygon) return;
+        const newPoints = polygon.points.map((p, i) => (i === drag.vertexIndex ? snapped.point : p));
+        updatePolygon(drag.polygonId, { points: newPoints }, true);
+        setPreviewPoint(snapped.point);
+        setPreviewSnapKind(snapped.kind);
+        return;
+      }
+
       if (drag?.type === 'moveSelection') {
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
 
@@ -773,6 +924,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           furnitureIds: memberIdsByKind(drag.members, 'furniture'),
           pathIds: memberIdsByKind(drag.members, 'path'),
           labelIds: memberIdsByKind(drag.members, 'label'),
+          polygonIds: memberIdsByKind(drag.members, 'polygon'),
         });
         let finalDelta = rawDelta;
         let snapKind: SnapKind = null;
@@ -804,6 +956,8 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
               },
               true,
             );
+          } else if (member.kind === 'polygon') {
+            updatePolygon(member.id, { points: member.points.map((p) => ({ x: p.x + finalDelta.x, y: p.y + finalDelta.y })) }, true);
           }
         }
         setPreviewSnapKind(snapKind);
@@ -835,6 +989,8 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
             const end = rotatePointAround(member.end, drag.pivot, deltaDeg);
             const controlPoint = member.controlPoint ? rotatePointAround(member.controlPoint, drag.pivot, deltaDeg) : undefined;
             updatePath(member.id, { start, end, controlPoint }, true);
+          } else if (member.kind === 'polygon') {
+            updatePolygon(member.id, { points: member.points.map((p) => rotatePointAround(p, drag.pivot, deltaDeg)) }, true);
           }
         }
         setPreviewSnapKind(null);
@@ -866,6 +1022,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       memberIdsByKind,
       panBy,
       paths,
+      polygons,
       snapCandidates,
       snapEnabled,
       updateDoor,
@@ -873,6 +1030,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       updateLabel,
       updateOutlet,
       updatePath,
+      updatePolygon,
       updateWall,
       updateWindow,
       viewport,
@@ -933,6 +1091,18 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           const current = labels.find((l) => l.id === drag.labelId);
           return !!current && !pointsEqual({ x: current.x, y: current.y }, drag.original);
         }
+        case 'movePolygon': {
+          const current = polygons.find((p) => p.id === drag.polygonId);
+          return !!current && !pointArraysEqual(current.points, drag.original.points);
+        }
+        case 'rotatePolygon': {
+          const current = polygons.find((p) => p.id === drag.polygonId);
+          return !!current && !pointArraysEqual(current.points, drag.original);
+        }
+        case 'polygonVertexDrag': {
+          const current = polygons.find((p) => p.id === drag.polygonId);
+          return !!current && !pointsEqual(current.points[drag.vertexIndex], drag.original);
+        }
         case 'moveSelection':
         case 'rotateSelection': {
           for (const member of drag.members) {
@@ -950,13 +1120,16 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
             } else if (member.kind === 'path') {
               const current = paths.find((p) => p.id === member.id);
               if (current && (!pointsEqual(current.start, member.start) || !pointsEqual(current.end, member.end))) return true;
+            } else if (member.kind === 'polygon') {
+              const current = polygons.find((p) => p.id === member.id);
+              if (current && !pointArraysEqual(current.points, member.points)) return true;
             }
           }
           return false;
         }
       }
     },
-    [doors, furniture, labels, outlets, paths, walls, windows],
+    [doors, furniture, labels, outlets, paths, polygons, walls, windows],
   );
 
   const finishBoxSelect = useCallback(
@@ -971,10 +1144,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
-      const hits = hitTestBoxSelection(drag.startWorld, endWorld, { furniture, outlets, paths, labels });
+      const hits = hitTestBoxSelection(drag.startWorld, endWorld, { furniture, outlets, paths, labels, polygons });
       setSelection(drag.additive ? mergeSelections(selection, hits) : hits);
     },
-    [deselect, furniture, labels, outlets, paths, selection, setSelection, viewport.scale],
+    [deselect, furniture, labels, outlets, paths, polygons, selection, setSelection, viewport.scale],
   );
 
   const endDrag = useCallback(
@@ -1015,7 +1188,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   const onContextMenu = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault();
-      if (activeTool === 'wall') endChain();
+      if (activeTool === 'wall' || activeTool === 'polygon') endChain();
     },
     [activeTool, endChain],
   );
@@ -1024,6 +1197,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     (e: React.KeyboardEvent<HTMLCanvasElement>) => {
       if (e.key === 'Escape') {
         endChain();
+        return;
+      }
+      if (e.key === 'Enter' && activeTool === 'polygon' && polygonDraft.length >= MIN_POLYGON_VERTICES) {
+        e.preventDefault();
+        addPolygon(polygonDraft);
+        setPolygonDraft([]);
+        setActiveTool('select');
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1054,7 +1234,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           break;
       }
     },
-    [copySelected, deleteSelected, endChain, pasteClipboard, redo, undo],
+    [activeTool, addPolygon, copySelected, deleteSelected, endChain, pasteClipboard, polygonDraft, redo, setActiveTool, undo],
   );
 
   return {
@@ -1078,6 +1258,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     previewPoint,
     previewSnapKind,
     selectionBox,
+    polygonDraft,
     onPointerDown,
     onPointerMove,
     onPointerUp,

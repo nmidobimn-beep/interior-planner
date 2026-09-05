@@ -5,11 +5,13 @@ import type { Door, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
+import type { Polygon } from '../types/polygon';
 import type { SnapCategoryFlags } from '../config/constants';
 import { openingEndpoints } from './openingGeometry';
 import { furnitureEdgeMidpoints, toWorldPolygon } from './furnitureGeometry';
 import { pathKeyPoints } from './pathGeometry';
 import { wallKeyPoints } from './wallGeometry';
+import { polygonKeyPoints } from './polygonGeometry';
 
 export interface SnapSourceEntities {
   walls: Wall[];
@@ -19,6 +21,7 @@ export interface SnapSourceEntities {
   outlets: Outlet[];
   paths: Path[];
   labels?: TextLabel[];
+  polygons?: Polygon[];
 }
 
 export interface SnapExclude {
@@ -26,22 +29,24 @@ export interface SnapExclude {
   furnitureId?: string;
   pathId?: string;
   labelId?: string;
+  polygonId?: string;
   /** 다중 선택 이동/회전 중 그룹 전체를 후보에서 뺄 때 쓴다(단수 필드와 함께 적용됨). */
   furnitureIds?: string[];
   pathIds?: string[];
   labelIds?: string[];
+  polygonIds?: string[];
 }
 
 /**
  * 스냅 후보점을 모은다 — CAD처럼 "끝점 / 중심점 / 모서리" 세 카테고리를 각각 켜고 끌 수 있다.
  * - 끝점: 벽 시작·끝·중간점, 문/창문 구간 끝점, 콘센트 위치, 동선 시작·끝·중간점(곡선은 조절점·
- *   곡선 중간 대표점도 포함), 라벨 위치
- * - 중심점: 가구 중심
+ *   곡선 중간 대표점도 포함), 라벨 위치, 다각형 꼭짓점·변 중간점
+ * - 중심점: 가구 중심, 다각형 중심
  * - 모서리: 가구(사각형/ㄱ자)의 회전된 바운딩 도형 꼭짓점 + 각 변의 중간점 (원은 모서리가 없어 제외)
  * exclude로 지금 드래그 중인 객체 자신은 후보에서 뺄 수 있다(자기 자신에게 들러붙는 것 방지).
  */
 export function collectSnapCandidates(
-  { walls, furniture, doors, windows, outlets, paths, labels = [] }: SnapSourceEntities,
+  { walls, furniture, doors, windows, outlets, paths, labels = [], polygons = [] }: SnapSourceEntities,
   categories: SnapCategoryFlags,
   exclude: SnapExclude = {},
 ): Point[] {
@@ -72,6 +77,10 @@ export function collectSnapCandidates(
     for (const label of labels) {
       if (label.id === exclude.labelId || exclude.labelIds?.includes(label.id)) continue;
       points.push({ x: label.x, y: label.y });
+    }
+    for (const polygon of polygons) {
+      if (polygon.id === exclude.polygonId || exclude.polygonIds?.includes(polygon.id)) continue;
+      points.push(...polygonKeyPoints(polygon));
     }
   }
 

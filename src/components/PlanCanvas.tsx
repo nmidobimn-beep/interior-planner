@@ -8,6 +8,8 @@ import { drawFurniture } from '../core/renderFurniture';
 import { drawDoors, drawOutlets, drawWindows } from '../core/renderOpenings';
 import { drawPathPreview, drawPaths } from '../core/renderPath';
 import { drawLabels } from '../core/renderLabel';
+import { drawPolygonPreview, drawPolygons } from '../core/renderPolygon';
+import { polygonBounds } from '../core/polygonGeometry';
 import { computeSelectionBounds } from '../core/multiSelectGeometry';
 import { drawSelectionBounds, drawSelectionMarquee } from '../core/renderSelection';
 import type { UseViewportResult } from '../hooks/useViewport';
@@ -36,6 +38,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     visibleOutlets: outlets,
     visiblePaths: paths,
     visibleLabels: labels,
+    visiblePolygons: polygons,
     selectedWall,
     selectedFurniture,
     selectedDoor,
@@ -43,12 +46,14 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selectedPolygon,
     selection,
     selectionCount,
     selectedFurnitureIds,
     selectedOutletIds,
     selectedPathIds,
     selectedLabelIds,
+    selectedPolygonIds,
   } = floorPlan;
   const {
     activeTool,
@@ -58,6 +63,8 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     previewPoint,
     previewSnapKind,
     selectionBox,
+    polygonDraft,
+    cursorWorld,
     onPointerDown,
     onPointerMove,
     onPointerUp,
@@ -113,11 +120,15 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     drawOutlets(ctx, viewport, outlets, selectedOutletIds);
     drawPaths(ctx, viewport, paths, selectedPathIds);
     drawLabels(ctx, viewport, labels, selectedLabelIds);
+    drawPolygons(ctx, viewport, polygons, selectedPolygonIds);
 
     // 다중 선택(2개 이상)일 때는 개별 손잡이 대신 전체를 감싸는 바운딩 박스 + 그룹 회전 손잡이를 보여준다.
     if (selectionCount > 1) {
-      const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels });
+      const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels, polygons });
       if (bounds) drawSelectionBounds(ctx, viewport, bounds);
+    } else if (selectedPolygon) {
+      // 다각형 하나만 선택된 경우도 같은 방식(바운딩 박스 + 회전 손잡이)으로 회전할 수 있게 해준다.
+      drawSelectionBounds(ctx, viewport, polygonBounds(selectedPolygon));
     }
 
     if (chainStart && previewPoint) {
@@ -126,6 +137,10 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     }
     if (previewPoint) {
       drawSnapIndicator(ctx, viewport, previewPoint, previewSnapKind);
+    }
+
+    if (activeTool === 'polygon' && polygonDraft.length > 0) {
+      drawPolygonPreview(ctx, viewport, polygonDraft, cursorWorld);
     }
 
     if (selectionBox) {
@@ -144,6 +159,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     outlets,
     paths,
     labels,
+    polygons,
     selectedWall,
     selectedFurniture,
     selectedDoor,
@@ -151,17 +167,21 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selectedPolygon,
     selection,
     selectionCount,
     selectedFurnitureIds,
     selectedOutletIds,
     selectedPathIds,
     selectedLabelIds,
+    selectedPolygonIds,
     activeTool,
     chainStart,
     previewPoint,
     previewSnapKind,
     selectionBox,
+    polygonDraft,
+    cursorWorld,
     defaultWallThicknessMm,
     displayUnit,
   ]);

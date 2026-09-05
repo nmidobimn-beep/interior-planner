@@ -270,7 +270,8 @@
 .plan-canvas--window,
 .plan-canvas--outlet,
 .plan-canvas--path,
-.plan-canvas--label {
+.plan-canvas--label,
+.plan-canvas--polygon {
   cursor: crosshair;
 }
 

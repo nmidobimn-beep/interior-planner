@@ -31,6 +31,7 @@ function App() {
         floorPlan.visibleOutlets,
         floorPlan.visiblePaths,
         floorPlan.visibleLabels,
+        floorPlan.visiblePolygons,
       ) ?? DEMO_BOUNDS,
     [
       floorPlan.visibleWalls,
@@ -38,6 +39,7 @@ function App() {
       floorPlan.visibleOutlets,
       floorPlan.visiblePaths,
       floorPlan.visibleLabels,
+      floorPlan.visiblePolygons,
     ],
   );
 

@@ -5,9 +5,10 @@ import type { Outlet } from '../types/outlet';
 import type { Layer } from '../types/layer';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
+import type { Polygon } from '../types/polygon';
 import { createHistoryReducer } from './history';
 
-export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label';
+export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label' | 'polygon';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
 /** 다중 선택 목록의 항목 하나. null을 허용하지 않는 SelectedObject라고 보면 된다. */
 export type SelectionItem = { kind: ObjectKind; id: string };
@@ -32,6 +33,7 @@ export interface FloorPlanState {
   outlets: Outlet[];
   paths: Path[];
   labels: TextLabel[];
+  polygons: Polygon[];
   layers: Layer[];
   activeLayerId: string;
   selection: SelectionItem[];
@@ -45,6 +47,7 @@ export const initialFloorPlanState: FloorPlanState = {
   outlets: [],
   paths: [],
   labels: [],
+  polygons: [],
   layers: [{ id: DEFAULT_LAYER_ID, name: '레이어 1', visible: true }],
   activeLayerId: DEFAULT_LAYER_ID,
   selection: [],
@@ -72,6 +75,9 @@ export type FloorPlanAction =
   | { type: 'ADD_LABEL'; label: TextLabel }
   | { type: 'UPDATE_LABEL'; id: string; patch: Partial<Omit<TextLabel, 'id'>>; transient?: boolean }
   | { type: 'DELETE_LABEL'; id: string }
+  | { type: 'ADD_POLYGON'; polygon: Polygon }
+  | { type: 'UPDATE_POLYGON'; id: string; patch: Partial<Omit<Polygon, 'id'>>; transient?: boolean }
+  | { type: 'DELETE_POLYGON'; id: string }
   | { type: 'DELETE_MANY'; items: SelectionItem[] }
   | { type: 'SELECT_OBJECT'; selection: SelectedObject }
   | { type: 'TOGGLE_SELECT_OBJECT'; item: SelectionItem }
@@ -200,6 +206,22 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         selection: removeFromSelection(state.selection, 'label', action.id),
       };
 
+    case 'ADD_POLYGON':
+      return { ...state, polygons: [...state.polygons, action.polygon], selection: [{ kind: 'polygon', id: action.polygon.id }] };
+
+    case 'UPDATE_POLYGON':
+      return {
+        ...state,
+        polygons: state.polygons.map((polygon) => (polygon.id === action.id ? { ...polygon, ...action.patch } : polygon)),
+      };
+
+    case 'DELETE_POLYGON':
+      return {
+        ...state,
+        polygons: state.polygons.filter((polygon) => polygon.id !== action.id),
+        selection: removeFromSelection(state.selection, 'polygon', action.id),
+      };
+
     case 'DELETE_MANY': {
       // 다중 선택 삭제를 한 건의 액션(=한 건의 Undo 기록)으로 처리한다.
       const ids: Record<ObjectKind, Set<string>> = {
@@ -210,6 +232,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         outlet: new Set(),
         path: new Set(),
         label: new Set(),
+        polygon: new Set(),
       };
       for (const item of action.items) ids[item.kind].add(item.id);
 
@@ -223,6 +246,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         outlets: state.outlets.filter((o) => !ids.outlet.has(o.id)),
         paths: state.paths.filter((p) => !ids.path.has(p.id)),
         labels: state.labels.filter((l) => !ids.label.has(l.id)),
+        polygons: state.polygons.filter((p) => !ids.polygon.has(p.id)),
         selection: [],
       };
     }
@@ -269,6 +293,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         outlets: reassign(state.outlets),
         paths: reassign(state.paths),
         labels: reassign(state.labels),
+        polygons: reassign(state.polygons),
       };
     }
 
@@ -291,6 +316,8 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
           return { ...state, paths: state.paths.map((p) => (p.id === action.id ? { ...p, layerId: action.layerId } : p)) };
         case 'label':
           return { ...state, labels: state.labels.map((l) => (l.id === action.id ? { ...l, layerId: action.layerId } : l)) };
+        case 'polygon':
+          return { ...state, polygons: state.polygons.map((p) => (p.id === action.id ? { ...p, layerId: action.layerId } : p)) };
         default:
           return state;
       }

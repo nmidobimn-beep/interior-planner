@@ -120,6 +120,18 @@ export const LABEL_FONT_SIZE_PX = 14;
 /** 라벨을 클릭으로 선택하기 위한 히트 반지름(px, 대략 텍스트 한 줄 높이) */
 export const LABEL_HIT_RADIUS_PX = 40;
 
+/** --- 자유 다각형 기본값 --- */
+export const DEFAULT_POLYGON_NAME = '다각형';
+export const DEFAULT_POLYGON_COLOR = '#d6862f';
+/** 다각형을 완성하려면 최소 이만큼의 꼭짓점이 필요하다(삼각형 이상). */
+export const MIN_POLYGON_VERTICES = 3;
+/** 그리는 중 첫 꼭짓점 근처를 다시 클릭하면 도형을 닫는다(이 거리 이내, px). */
+export const POLYGON_CLOSE_HIT_RADIUS_PX = 10;
+/** 다각형 선택 시 꼭짓점 손잡이의 화면 히트 반지름(px) */
+export const POLYGON_VERTEX_HANDLE_RADIUS_PX = 6;
+/** 다각형 본체를 클릭으로 선택하기 위한 테두리 근처 허용치(px) — 내부 클릭은 항상 선택됨 */
+export const POLYGON_EDGE_HIT_TOLERANCE_PX = 6;
+
 /** --- 스냅 대상 종류 (CAD처럼 개별로 켜고 끌 수 있음) --- */
 export interface SnapCategoryFlags {
   endpoint: boolean;
@@ -188,4 +200,11 @@ export const COLORS = {
   multiSelectFill: 'rgba(224, 135, 47, 0.35)',
   marqueeFill: 'rgba(47, 111, 237, 0.10)',
   marqueeStroke: 'rgba(47, 111, 237, 0.7)',
+
+  polygonSelectedFill: 'rgba(47, 111, 237, 0.18)',
+  polygonSelectedStroke: '#1d4fc4',
+  polygonText: '#1f2937',
+  polygonHandle: '#ffffff',
+  polygonHandleStroke: '#1d4fc4',
+  polygonPreview: 'rgba(214, 134, 47, 0.35)',
 } as const;
