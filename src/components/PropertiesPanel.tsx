@@ -1,11 +1,16 @@
 import {
   MAX_FURNITURE_SIZE_MM,
+  MAX_OUTLET_COUNT,
   MAX_WALL_THICKNESS_MM,
   MIN_FURNITURE_SIZE_MM,
+  MIN_OPENING_WIDTH_MM,
+  MIN_OUTLET_COUNT,
   MIN_WALL_LENGTH_MM,
   MIN_WALL_THICKNESS_MM,
 } from '../config/constants';
+import { clampOpeningOffset } from '../core/openingGeometry';
 import { endPointForLength, wallLengthMm } from '../core/wallGeometry';
+import type { HingeSide, SwingDirection } from '../types/opening';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 
 interface PropertiesPanelProps {
@@ -14,7 +19,20 @@ interface PropertiesPanelProps {
 
 /** 오른쪽 속성 패널 — 선택된 벽 또는 가구의 속성을 편집하고 삭제할 수 있다. */
 export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
-  const { selectedWall, selectedFurniture, updateWall, updateFurniture, deleteSelected } = floorPlan;
+  const {
+    walls,
+    selectedWall,
+    selectedFurniture,
+    selectedDoor,
+    selectedWindow,
+    selectedOutlet,
+    updateWall,
+    updateFurniture,
+    updateDoor,
+    updateWindow,
+    updateOutlet,
+    deleteSelected,
+  } = floorPlan;
 
   if (selectedWall) {
     const lengthMm = Math.round(wallLengthMm(selectedWall));
@@ -190,10 +208,153 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
     );
   }
 
+  if (selectedDoor) {
+    const wall = walls.find((w) => w.id === selectedDoor.wallId);
+    const wallLength = wall ? wallLengthMm(wall) : MAX_WALL_THICKNESS_MM * 10;
+
+    const changeWidth = (value: number) => {
+      if (!wall || !Number.isFinite(value)) return;
+      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, value));
+      const centerOffset = selectedDoor.offsetMm + selectedDoor.widthMm / 2;
+      const newOffset = clampOpeningOffset(centerOffset - newWidth / 2, newWidth, wallLength);
+      updateDoor(selectedDoor.id, { widthMm: newWidth, offsetMm: newOffset });
+    };
+
+    return (
+      <>
+        <div className="side-panel-title">문 속성</div>
+
+        <div className="field-row">
+          <label htmlFor="door-width">폭 (mm)</label>
+          <input
+            id="door-width"
+            type="number"
+            min={MIN_OPENING_WIDTH_MM}
+            max={wallLength}
+            value={Math.round(selectedDoor.widthMm)}
+            onChange={(e) => changeWidth(Number(e.target.value))}
+          />
+        </div>
+
+        <div className="field-row">
+          <label htmlFor="door-hinge">경첩</label>
+          <select
+            id="door-hinge"
+            value={selectedDoor.hingeSide}
+            onChange={(e) => updateDoor(selectedDoor.id, { hingeSide: e.target.value as HingeSide })}
+          >
+            <option value="start">왼쪽</option>
+            <option value="end">오른쪽</option>
+          </select>
+        </div>
+
+        <div className="field-row">
+          <label htmlFor="door-swing">여닫이</label>
+          <select
+            id="door-swing"
+            value={selectedDoor.swingDirection}
+            onChange={(e) => updateDoor(selectedDoor.id, { swingDirection: e.target.value as SwingDirection })}
+          >
+            <option value="in">안쪽 열림</option>
+            <option value="out">바깥쪽 열림</option>
+          </select>
+        </div>
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          문 삭제
+        </button>
+      </>
+    );
+  }
+
+  if (selectedWindow) {
+    const wall = walls.find((w) => w.id === selectedWindow.wallId);
+    const wallLength = wall ? wallLengthMm(wall) : MAX_WALL_THICKNESS_MM * 10;
+
+    const changeWidth = (value: number) => {
+      if (!wall || !Number.isFinite(value)) return;
+      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, value));
+      const centerOffset = selectedWindow.offsetMm + selectedWindow.widthMm / 2;
+      const newOffset = clampOpeningOffset(centerOffset - newWidth / 2, newWidth, wallLength);
+      updateWindow(selectedWindow.id, { widthMm: newWidth, offsetMm: newOffset });
+    };
+
+    return (
+      <>
+        <div className="side-panel-title">창문 속성</div>
+
+        <div className="field-row">
+          <label htmlFor="window-width">폭 (mm)</label>
+          <input
+            id="window-width"
+            type="number"
+            min={MIN_OPENING_WIDTH_MM}
+            max={wallLength}
+            value={Math.round(selectedWindow.widthMm)}
+            onChange={(e) => changeWidth(Number(e.target.value))}
+          />
+        </div>
+
+        <div className="field-row field-row--stacked">
+          <label htmlFor="window-memo">메모</label>
+          <textarea
+            id="window-memo"
+            rows={2}
+            value={selectedWindow.memo ?? ''}
+            onChange={(e) => updateWindow(selectedWindow.id, { memo: e.target.value })}
+          />
+        </div>
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          창문 삭제
+        </button>
+      </>
+    );
+  }
+
+  if (selectedOutlet) {
+    return (
+      <>
+        <div className="side-panel-title">콘센트 속성</div>
+
+        <div className="field-row">
+          <label htmlFor="outlet-count">개수</label>
+          <input
+            id="outlet-count"
+            type="number"
+            min={MIN_OUTLET_COUNT}
+            max={MAX_OUTLET_COUNT}
+            value={selectedOutlet.count}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (!Number.isFinite(value)) return;
+              updateOutlet(selectedOutlet.id, { count: Math.min(MAX_OUTLET_COUNT, Math.max(MIN_OUTLET_COUNT, value)) });
+            }}
+          />
+        </div>
+
+        <div className="field-row field-row--stacked">
+          <label htmlFor="outlet-memo">메모</label>
+          <textarea
+            id="outlet-memo"
+            rows={2}
+            placeholder="예: TV, 인터넷, 에어컨"
+            value={selectedOutlet.memo ?? ''}
+            onChange={(e) => updateOutlet(selectedOutlet.id, { memo: e.target.value })}
+          />
+        </div>
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          콘센트 삭제
+        </button>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="side-panel-title">속성</div>
-      <div className="side-panel-placeholder">벽 또는 가구를 선택하면 속성을 편집할 수 있습니다.</div>
+      <div className="side-panel-placeholder">객체를 선택하면 속성을 편집할 수 있습니다.</div>
     </>
   );
 }

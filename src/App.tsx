@@ -23,8 +23,8 @@ function App() {
   const handleSizeChange = useCallback((size: Size) => setCanvasSize(size), []);
 
   const fitBounds = useMemo(
-    () => computePlanBounds(floorPlan.walls, floorPlan.furniture) ?? DEMO_BOUNDS,
-    [floorPlan.walls, floorPlan.furniture],
+    () => computePlanBounds(floorPlan.walls, floorPlan.furniture, floorPlan.outlets) ?? DEMO_BOUNDS,
+    [floorPlan.walls, floorPlan.furniture, floorPlan.outlets],
   );
 
   return (

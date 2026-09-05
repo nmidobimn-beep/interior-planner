@@ -73,6 +73,23 @@ export const FURNITURE_HANDLE_RADIUS_PX = 7;
 /** 새 가구의 기본 색상 (hex). 사용자가 속성 패널에서 도형별로 자유롭게 바꿀 수 있다. */
 export const DEFAULT_FURNITURE_COLOR = '#2f9e6f';
 
+/** --- 문/창문 기본값 --- */
+export const DEFAULT_DOOR_WIDTH_MM = 900;
+export const DEFAULT_WINDOW_WIDTH_MM = 1200;
+export const MIN_OPENING_WIDTH_MM = 300;
+export const MAX_OPENING_WIDTH_MM = 3000;
+/** 문/창문을 벽으로 인식하는 클릭 허용치(px, 두께에 더해짐) */
+export const OPENING_WALL_HIT_TOLERANCE_PX = 10;
+/** 문/창문 선택 손잡이(끝점)의 화면 히트 반지름(px) */
+export const OPENING_HANDLE_RADIUS_PX = 6;
+
+/** --- 콘센트 기본값 --- */
+export const DEFAULT_OUTLET_COUNT = 1;
+export const MIN_OUTLET_COUNT = 1;
+export const MAX_OUTLET_COUNT = 8;
+/** 콘센트 아이콘의 화면 반지름(px) — 확대/축소와 무관하게 항상 일정한 크기로 표시 */
+export const OUTLET_ICON_RADIUS_PX = 9;
+
 export const COLORS = {
   background: '#f5f6f8',
   gridMinor: '#e4e6eb',
@@ -108,4 +125,14 @@ export const COLORS = {
   snapEndpoint: '#e0554f',
   snapAngle: '#e08a2f',
   snapGrid: '#767c88',
+
+  doorLeaf: '#b8672f',
+  doorSelected: '#1d4fc4',
+  windowFill: '#bfe0f5',
+  windowGlass: '#3a7bd5',
+  windowSelected: '#1d4fc4',
+  outletFill: '#ffffff',
+  outletStroke: '#4a4f58',
+  outletSelected: '#1d4fc4',
+  outletText: '#1f2937',
 } as const;

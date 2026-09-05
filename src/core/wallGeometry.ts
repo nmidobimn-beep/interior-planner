@@ -87,3 +87,43 @@ export function collectEndpoints(walls: Wall[], excludeWallId?: string): Point[]
   }
   return points;
 }
+
+export function wallDirectionUnit(wall: Pick<Wall, 'start' | 'end'>): Point {
+  const len = wallLengthMm(wall) || 1;
+  return { x: (wall.end.x - wall.start.x) / len, y: (wall.end.y - wall.start.y) / len };
+}
+
+export function wallPerpendicularUnit(wall: Pick<Wall, 'start' | 'end'>): Point {
+  const dir = wallDirectionUnit(wall);
+  return { x: -dir.y, y: dir.x };
+}
+
+/** point를 벽 중심선에 투영해, 시작점부터의 거리(offsetMm)와 중심선까지 수직 거리(perpDistanceMm)를 구한다. */
+export function projectPointOntoWall(point: Point, wall: Pick<Wall, 'start' | 'end'>): { offsetMm: number; perpDistanceMm: number } {
+  const dir = wallDirectionUnit(wall);
+  const perp = wallPerpendicularUnit(wall);
+  const rel = { x: point.x - wall.start.x, y: point.y - wall.start.y };
+  return {
+    offsetMm: rel.x * dir.x + rel.y * dir.y,
+    perpDistanceMm: Math.abs(rel.x * perp.x + rel.y * perp.y),
+  };
+}
+
+/** 문/창문을 새로 놓을 때: point(mm)가 어느 벽 위에 있는지, 있다면 그 벽 위 offset(mm)까지 함께 찾는다. */
+export function findWallAtPoint(point: Point, walls: Wall[], toleranceMm: number): { wall: Wall; offsetMm: number } | null {
+  let best: { wall: Wall; offsetMm: number } | null = null;
+  let bestDistance = Infinity;
+
+  for (const wall of walls) {
+    const { offsetMm, perpDistanceMm } = projectPointOntoWall(point, wall);
+    const length = wallLengthMm(wall);
+    if (offsetMm < 0 || offsetMm > length) continue;
+    const edgeDistance = perpDistanceMm - wall.thicknessMm / 2;
+    if (edgeDistance <= toleranceMm && edgeDistance < bestDistance) {
+      best = { wall, offsetMm };
+      bestDistance = edgeDistance;
+    }
+  }
+
+  return best;
+}

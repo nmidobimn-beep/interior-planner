@@ -4,27 +4,43 @@ import type { Wall } from '../types/wall';
 import type { FurnitureShape } from '../types/furniture';
 import {
   DEFAULT_ARM_THICKNESS_MM,
+  DEFAULT_DOOR_WIDTH_MM,
   DEFAULT_FURNITURE_SIZE,
+  DEFAULT_OUTLET_COUNT,
   DEFAULT_WALL_THICKNESS_MM,
+  DEFAULT_WINDOW_WIDTH_MM,
   FURNITURE_HANDLE_RADIUS_PX,
   MIN_WALL_LENGTH_MM,
+  OPENING_WALL_HIT_TOLERANCE_PX,
   WALL_ENDPOINT_HANDLE_RADIUS_PX,
   WALL_HIT_TOLERANCE_PX,
 } from '../config/constants';
 import { screenToWorld, worldToScreen, type Viewport } from '../core/viewport';
 import { snapAngleDeg, snapPoint, type SnapKind } from '../core/snap';
-import { collectEndpoints, distance, hitTestWalls, type WallEndpointKey } from '../core/wallGeometry';
+import {
+  collectEndpoints,
+  distance,
+  findWallAtPoint,
+  hitTestWalls,
+  projectPointOntoWall,
+  wallLengthMm,
+  type WallEndpointKey,
+} from '../core/wallGeometry';
 import { hitTestFurnitureList, rotationHandleWorldPoint } from '../core/furnitureGeometry';
+import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from '../core/openingGeometry';
 import type { UseFloorPlanResult } from './useFloorPlan';
 
-export type ToolId = 'select' | 'wall' | FurnitureShape;
+export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet';
 
 type DragState =
   | { type: 'pan'; lastClient: Point }
   | { type: 'moveWall'; wallId: string; original: Wall; grabWorld: Point }
   | { type: 'endpointDrag'; wallId: string; key: WallEndpointKey }
   | { type: 'moveFurniture'; furnitureId: string; original: Point; grabWorld: Point }
-  | { type: 'rotateFurniture'; furnitureId: string };
+  | { type: 'rotateFurniture'; furnitureId: string }
+  | { type: 'moveDoor'; doorId: string }
+  | { type: 'moveWindow'; windowId: string }
+  | { type: 'moveOutlet'; outletId: string; original: Point; grabWorld: Point };
 
 interface UsePlanInteractionArgs {
   viewport: Viewport;
@@ -42,7 +58,32 @@ const isFurnitureTool = (tool: ToolId): tool is FurnitureShape =>
  * useViewport에, 실제 데이터 변경은 useFloorPlan에 위임한다.
  */
 export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanInteractionArgs) {
-  const { walls, furniture, selectedWall, selectedFurniture, addWall, updateWall, addFurniture, updateFurniture, selectWall, selectFurniture, deselect, deleteSelected } = floorPlan;
+  const {
+    walls,
+    furniture,
+    doors,
+    windows,
+    outlets,
+    selectedWall,
+    selectedFurniture,
+    addWall,
+    updateWall,
+    addFurniture,
+    updateFurniture,
+    addDoor,
+    updateDoor,
+    addWindow,
+    updateWindow,
+    addOutlet,
+    updateOutlet,
+    selectWall,
+    selectFurniture,
+    selectDoor,
+    selectWindow,
+    selectOutlet,
+    deselect,
+    deleteSelected,
+  } = floorPlan;
 
   const [activeTool, setActiveToolState] = useState<ToolId>('select');
   const [defaultWallThicknessMm, setDefaultWallThicknessMm] = useState(DEFAULT_WALL_THICKNESS_MM);
@@ -113,6 +154,25 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (activeTool === 'door' || activeTool === 'window') {
+        const hit = findWallAtPoint(worldRaw, walls, OPENING_WALL_HIT_TOLERANCE_PX / viewport.scale);
+        if (hit) {
+          const width = Math.min(activeTool === 'door' ? DEFAULT_DOOR_WIDTH_MM : DEFAULT_WINDOW_WIDTH_MM, wallLengthMm(hit.wall));
+          const offset = clampOpeningOffset(hit.offsetMm - width / 2, width, wallLengthMm(hit.wall));
+          if (activeTool === 'door') addDoor(hit.wall.id, offset, width);
+          else addWindow(hit.wall.id, offset, width);
+          setActiveTool('select');
+        }
+        return;
+      }
+
+      if (activeTool === 'outlet') {
+        const snapped = snapPoint(worldRaw, { scale: viewport.scale, enabled: snapEnabled });
+        addOutlet(snapped.point, DEFAULT_OUTLET_COUNT);
+        setActiveTool('select');
+        return;
+      }
+
       // --- 선택 도구 ---
       if (selectedFurniture) {
         const handleScreen = worldToScreen(viewport, rotationHandleWorldPoint(selectedFurniture));
@@ -152,6 +212,36 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      const openingTolerance = OPENING_WALL_HIT_TOLERANCE_PX / viewport.scale;
+      const hitDoor = hitTestDoors(worldRaw, doors, walls, openingTolerance);
+      if (hitDoor) {
+        selectDoor(hitDoor.id);
+        dragState.current = { type: 'moveDoor', doorId: hitDoor.id };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      const hitWindow = hitTestWindows(worldRaw, windows, walls, openingTolerance);
+      if (hitWindow) {
+        selectWindow(hitWindow.id);
+        dragState.current = { type: 'moveWindow', windowId: hitWindow.id };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      const hitOutlet = hitTestOutlets(worldRaw, outlets, openingTolerance);
+      if (hitOutlet) {
+        selectOutlet(hitOutlet.id);
+        dragState.current = {
+          type: 'moveOutlet',
+          outletId: hitOutlet.id,
+          original: { x: hitOutlet.x, y: hitOutlet.y },
+          grabWorld: worldRaw,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
       const hitWall = hitTestWalls(worldRaw, walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
       if (hitWall) {
         selectWall(hitWall.id);
@@ -166,21 +256,30 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     },
     [
       activeTool,
+      addDoor,
       addFurniture,
+      addOutlet,
       addWall,
+      addWindow,
       chainStart,
       defaultWallThicknessMm,
       deselect,
+      doors,
       furniture,
       getScreenPoint,
+      outlets,
+      selectDoor,
       selectFurniture,
+      selectOutlet,
       selectWall,
+      selectWindow,
       selectedFurniture,
       selectedWall,
       setActiveTool,
       snapEnabled,
       viewport,
       walls,
+      windows,
     ],
   );
 
@@ -249,6 +348,29 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (drag?.type === 'moveDoor' || drag?.type === 'moveWindow') {
+        const isDoor = drag.type === 'moveDoor';
+        const id = isDoor ? drag.doorId : drag.windowId;
+        const opening = isDoor ? doors.find((d) => d.id === id) : windows.find((w) => w.id === id);
+        const wall = opening ? walls.find((w) => w.id === opening.wallId) : undefined;
+        if (!opening || !wall) return;
+        const { offsetMm } = projectPointOntoWall(worldRaw, wall);
+        const newOffset = clampOpeningOffset(offsetMm - opening.widthMm / 2, opening.widthMm, wallLengthMm(wall));
+        if (isDoor) updateDoor(id, { offsetMm: newOffset });
+        else updateWindow(id, { offsetMm: newOffset });
+        return;
+      }
+
+      if (drag?.type === 'moveOutlet') {
+        const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
+        const rawCenter = { x: drag.original.x + rawDelta.x, y: drag.original.y + rawDelta.y };
+        const snapped = snapPoint(rawCenter, { scale: viewport.scale, enabled: snapEnabled });
+        updateOutlet(drag.outletId, { x: snapped.point.x, y: snapped.point.y });
+        setPreviewPoint(snapped.point);
+        setPreviewSnapKind(snapped.kind);
+        return;
+      }
+
       if (activeTool === 'wall' && chainStart) {
         const candidatePoints = collectEndpoints(walls);
         const snapped = snapPoint(worldRaw, {
@@ -261,7 +383,23 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         setPreviewSnapKind(snapped.kind);
       }
     },
-    [activeTool, chainStart, furniture, getScreenPoint, panBy, snapEnabled, updateFurniture, updateWall, viewport, walls],
+    [
+      activeTool,
+      chainStart,
+      doors,
+      furniture,
+      getScreenPoint,
+      panBy,
+      snapEnabled,
+      updateDoor,
+      updateFurniture,
+      updateOutlet,
+      updateWall,
+      updateWindow,
+      viewport,
+      walls,
+      windows,
+    ],
   );
 
   const endDrag = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {

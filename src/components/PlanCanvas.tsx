@@ -5,6 +5,7 @@ import { drawRulers } from '../core/ruler';
 import { drawDemoScene } from '../core/demoScene';
 import { drawSnapIndicator, drawWallPreview, drawWalls } from '../core/renderWalls';
 import { drawFurniture } from '../core/renderFurniture';
+import { drawDoors, drawOutlets, drawWindows } from '../core/renderOpenings';
 import type { UseViewportResult } from '../hooks/useViewport';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
@@ -23,7 +24,18 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
   const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, onWheel } = viewportApi;
-  const { walls, furniture, selectedWall, selectedFurniture } = floorPlan;
+  const {
+    walls,
+    furniture,
+    doors,
+    windows,
+    outlets,
+    selectedWall,
+    selectedFurniture,
+    selectedDoor,
+    selectedWindow,
+    selectedOutlet,
+  } = floorPlan;
   const {
     activeTool,
     defaultWallThicknessMm,
@@ -63,7 +75,10 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     if (showDemo) drawDemoScene(ctx, viewport);
 
     drawWalls(ctx, viewport, walls, selectedWall?.id ?? null);
+    drawDoors(ctx, viewport, doors, walls, selectedDoor?.id ?? null);
+    drawWindows(ctx, viewport, windows, walls, selectedWindow?.id ?? null);
     drawFurniture(ctx, viewport, furniture, selectedFurniture?.id ?? null);
+    drawOutlets(ctx, viewport, outlets, selectedOutlet?.id ?? null);
 
     if (chainStart && previewPoint) {
       drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm);
@@ -79,8 +94,14 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     showDemo,
     walls,
     furniture,
+    doors,
+    windows,
+    outlets,
     selectedWall,
     selectedFurniture,
+    selectedDoor,
+    selectedWindow,
+    selectedOutlet,
     chainStart,
     previewPoint,
     previewSnapKind,

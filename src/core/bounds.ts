@@ -1,13 +1,17 @@
 import type { Bounds } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Furniture } from '../types/furniture';
+import type { Outlet } from '../types/outlet';
 import { furnitureBounds } from './furnitureGeometry';
 
 const EMPTY_PLAN_MARGIN_MM = 500;
 
-/** 벽·가구를 모두 포함하는 mm 경계 상자를 계산한다. 아무 객체도 없으면 null. */
-export function computePlanBounds(walls: Wall[], furniture: Furniture[]): Bounds | null {
-  if (walls.length === 0 && furniture.length === 0) return null;
+/**
+ * 벽·가구·콘센트를 모두 포함하는 mm 경계 상자를 계산한다. 아무 객체도 없으면 null.
+ * 문/창문은 항상 벽 위에 있으므로 벽의 경계에 이미 포함된다.
+ */
+export function computePlanBounds(walls: Wall[], furniture: Furniture[], outlets: Outlet[] = []): Bounds | null {
+  if (walls.length === 0 && furniture.length === 0 && outlets.length === 0) return null;
 
   let minX = Infinity;
   let minY = Infinity;
@@ -30,6 +34,13 @@ export function computePlanBounds(walls: Wall[], furniture: Furniture[]): Bounds
     minY = Math.min(minY, b.minY);
     maxX = Math.max(maxX, b.maxX);
     maxY = Math.max(maxY, b.maxY);
+  }
+
+  for (const outlet of outlets) {
+    minX = Math.min(minX, outlet.x);
+    minY = Math.min(minY, outlet.y);
+    maxX = Math.max(maxX, outlet.x);
+    maxY = Math.max(maxY, outlet.y);
   }
 
   return {
