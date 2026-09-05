@@ -18,6 +18,18 @@ npm install
 npm run dev
 ```
 
+## 배포
+
+GitHub Pages로 배포한다. `master`에 push되면 `.github/workflows/deploy.yml`이 자동으로
+빌드 후 배포한다(`actions/upload-pages-artifact` + `actions/deploy-pages`). 프로젝트
+사이트(`https://<계정>.github.io/interior-planner/`)로 서빙되므로 `vite.config.ts`에
+`base: '/interior-planner/'`를 지정해 에셋 경로를 맞췄다 — 로컬 `npm run dev`로 열 때도
+`http://localhost:5173/interior-planner/`(포트는 다를 수 있음)로 접속해야 한다(루트 경로는
+이 경로로 리다이렉트됨).
+
+저장소의 Settings → Pages → Build and deployment → Source가 **GitHub Actions**로 되어
+있어야 한다(리포지토리를 새로 만든 뒤 처음 한 번은 수동으로 확인/설정이 필요할 수 있음).
+
 ## 구조
 
 ```
