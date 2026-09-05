@@ -1,0 +1,56 @@
+import { MAX_WALL_THICKNESS_MM, MIN_WALL_THICKNESS_MM } from '../config/constants';
+import type { ToolId, UsePlanInteractionResult } from '../hooks/usePlanInteraction';
+
+interface ToolPanelProps {
+  interaction: UsePlanInteractionResult;
+}
+
+const TOOLS: { id: ToolId; label: string; hint: string }[] = [
+  { id: 'select', label: '선택', hint: '클릭해서 선택 · 드래그로 이동' },
+  { id: 'wall', label: '벽', hint: '클릭-클릭으로 연결해 그리기 (Esc/우클릭: 종료)' },
+];
+
+/** 왼쪽 도구 패널. 도구 전환과, 새로 그릴 벽의 기본 두께를 설정한다. */
+export function ToolPanel({ interaction }: ToolPanelProps) {
+  const { activeTool, setActiveTool, defaultWallThicknessMm, setDefaultWallThicknessMm } = interaction;
+
+  return (
+    <>
+      <div className="side-panel-title">도구</div>
+      <div className="tool-button-list">
+        {TOOLS.map((tool) => (
+          <button
+            key={tool.id}
+            type="button"
+            className={`tool-button${activeTool === tool.id ? ' is-active' : ''}`}
+            onClick={() => setActiveTool(tool.id)}
+            title={tool.hint}
+          >
+            {tool.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTool === 'wall' && (
+        <div className="field-row">
+          <label htmlFor="default-wall-thickness">기본 벽 두께 (mm)</label>
+          <input
+            id="default-wall-thickness"
+            type="number"
+            min={MIN_WALL_THICKNESS_MM}
+            max={MAX_WALL_THICKNESS_MM}
+            value={defaultWallThicknessMm}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (!Number.isFinite(value)) return;
+              setDefaultWallThicknessMm(Math.min(MAX_WALL_THICKNESS_MM, Math.max(MIN_WALL_THICKNESS_MM, value)));
+            }}
+          />
+        </div>
+      )}
+
+      <div className="side-panel-title">앞으로 추가될 도구</div>
+      <div className="side-panel-placeholder">문 · 창문 · 콘센트 · 가구 (3~4단계에서 추가 예정)</div>
+    </>
+  );
+}

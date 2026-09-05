@@ -30,6 +30,29 @@ export const GRID_NICE_STEPS_MM = [
 /** 초기 뷰포트 축척: 1mm = 0.1px (즉 1:10 비율로 시작) */
 export const INITIAL_SCALE = 0.1;
 
+/** 새 벽을 그릴 때 사용할 기본 두께 (mm). 일반적인 실내 벽 두께 기준. */
+export const DEFAULT_WALL_THICKNESS_MM = 120;
+export const MIN_WALL_THICKNESS_MM = 10;
+export const MAX_WALL_THICKNESS_MM = 500;
+
+/** 벽 선택 시 끝점 손잡이(handle)의 화면 반지름(px) */
+export const WALL_ENDPOINT_HANDLE_RADIUS_PX = 6;
+/** 벽 본체를 클릭으로 선택하기 위한 여유 허용치(px, 두께에 더해짐) */
+export const WALL_HIT_TOLERANCE_PX = 6;
+
+/** --- 스냅 설정 --- */
+/** 기존 벽 끝점에 붙는 스냅의 허용 반경(px). 우선순위 1위. */
+export const SNAP_ENDPOINT_RADIUS_PX = 14;
+/** 각도 스냅 후보 (도). 가구 회전 스냅과 동일한 각도 체계를 사용한다. */
+export const SNAP_ANGLE_STEPS_DEG = [0, 45, 90, 135, 180, 225, 270, 315];
+/** 각도 스냅이 걸리는 허용오차(도). 이보다 벗어나면 자유 각도로 그린다. */
+export const SNAP_ANGLE_TOLERANCE_DEG = 4;
+/** 격자 스냅 간격 (mm). 우선순위 3위(최후 수단). */
+export const SNAP_GRID_MM = 50;
+
+/** 이보다 짧은 벽은 생성하지 않는다 (같은 자리 실수 클릭 방지). */
+export const MIN_WALL_LENGTH_MM = 50;
+
 export const COLORS = {
   background: '#f5f6f8',
   gridMinor: '#e4e6eb',
@@ -44,4 +67,17 @@ export const COLORS = {
   furnitureStroke: '#2f6fed',
   furnitureFill: 'rgba(47, 111, 237, 0.12)',
   furnitureText: '#1f2937',
+
+  wallFill: '#5b6270',
+  wallStroke: '#3d4149',
+  wallSelectedFill: '#2f6fed',
+  wallSelectedStroke: '#1d4fc4',
+  wallHandle: '#ffffff',
+  wallHandleStroke: '#1d4fc4',
+  wallPreview: 'rgba(47, 111, 237, 0.55)',
+  wallLengthLabel: '#1f2937',
+
+  snapEndpoint: '#e0554f',
+  snapAngle: '#e08a2f',
+  snapGrid: '#767c88',
 } as const;

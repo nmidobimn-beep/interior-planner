@@ -1,17 +1,20 @@
 import type { Bounds, Size } from '../types/geometry';
 import type { UseViewportResult } from '../hooks/useViewport';
+import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
 
 interface ToolbarProps {
   viewportApi: UseViewportResult;
+  interaction: UsePlanInteractionResult;
   canvasSize: Size;
   fitBounds: Bounds;
   showDemo: boolean;
   onToggleDemo: (value: boolean) => void;
 }
 
-/** 상단 툴바. 1단계에서는 확대/축소/전체보기만 제공하고, 이후 단계에서 저장/실행취소 등을 추가한다. */
-export function Toolbar({ viewportApi, canvasSize, fitBounds, showDemo, onToggleDemo }: ToolbarProps) {
+/** 상단 툴바. 확대/축소/전체보기와, 도구 전체에 영향을 주는 스냅 on/off를 담당한다. */
+export function Toolbar({ viewportApi, interaction, canvasSize, fitBounds, showDemo, onToggleDemo }: ToolbarProps) {
   const { viewport, zoomIn, zoomOut, fitToView } = viewportApi;
+  const { snapEnabled, setSnapEnabled } = interaction;
   const zoomPercent = Math.round(viewport.scale * 100);
 
   return (
@@ -31,10 +34,17 @@ export function Toolbar({ viewportApi, canvasSize, fitBounds, showDemo, onToggle
         </button>
       </div>
 
-      <label className="toolbar-demo-toggle">
-        <input type="checkbox" checked={showDemo} onChange={(e) => onToggleDemo(e.target.checked)} />
-        예시 표시 (4000×3000mm 방 + 2000×1000mm 침대)
-      </label>
+      <div className="toolbar-toggles">
+        <label className="toolbar-toggle">
+          <input type="checkbox" checked={snapEnabled} onChange={(e) => setSnapEnabled(e.target.checked)} />
+          스냅
+        </label>
+
+        <label className="toolbar-toggle">
+          <input type="checkbox" checked={showDemo} onChange={(e) => onToggleDemo(e.target.checked)} />
+          예시 표시
+        </label>
+      </div>
     </header>
   );
 }
