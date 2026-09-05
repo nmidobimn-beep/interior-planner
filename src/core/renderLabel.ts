@@ -2,13 +2,13 @@ import type { TextLabel } from '../types/label';
 import { COLORS, LABEL_FONT_SIZE_PX } from '../config/constants';
 import { worldToScreen, type Viewport } from './viewport';
 
-export function drawLabels(ctx: CanvasRenderingContext2D, viewport: Viewport, labels: TextLabel[], selectedId: string | null) {
+export function drawLabels(ctx: CanvasRenderingContext2D, viewport: Viewport, labels: TextLabel[], selectedIds: ReadonlySet<string>) {
   ctx.font = `600 ${LABEL_FONT_SIZE_PX}px system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   for (const label of labels) {
-    const isSelected = label.id === selectedId;
+    const isSelected = selectedIds.has(label.id);
     const screen = worldToScreen(viewport, label);
 
     if (isSelected) {

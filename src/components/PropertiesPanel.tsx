@@ -59,6 +59,7 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selectionCount,
     updateWall,
     updateFurniture,
     updateDoor,
@@ -70,6 +71,21 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
     deleteSelected,
   } = floorPlan;
   const { displayUnit: unit } = interaction;
+
+  if (selectionCount > 1) {
+    return (
+      <>
+        <div className="side-panel-title">다중 선택</div>
+        <div className="side-panel-placeholder">
+          객체 {selectionCount}개가 선택되었습니다. 하나를 드래그하면 전체가 함께 이동하고, 바운딩 박스 위쪽
+          손잡이를 드래그하면 전체가 함께 회전합니다.
+        </div>
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          선택한 {selectionCount}개 삭제
+        </button>
+      </>
+    );
+  }
 
   if (selectedWall) {
     const lengthMm = Math.round(wallLengthMm(selectedWall));

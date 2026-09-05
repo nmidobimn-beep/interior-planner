@@ -9,6 +9,8 @@ import { createHistoryReducer } from './history';
 
 export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
+/** 다중 선택 목록의 항목 하나. null을 허용하지 않는 SelectedObject라고 보면 된다. */
+export type SelectionItem = { kind: ObjectKind; id: string };
 
 /** 새 프로젝트에 항상 존재하는 첫 레이어의 고정 id (마지막 레이어는 삭제할 수 없어 항상 최소 1개 존재). */
 export const DEFAULT_LAYER_ID = 'layer-default';
@@ -16,6 +18,11 @@ export const DEFAULT_LAYER_ID = 'layer-default';
 /**
  * 도면의 모든 객체를 담는 단일 상태.
  * 5단계(Undo/Redo)에서 이 reducer의 액션 로그를 그대로 히스토리로 쓴다.
+ *
+ * 선택 상태는 `selection`(배열) 하나로 관리한다 — 0개면 선택 없음, 1개면 기존과 동일한
+ * "단일 선택", 2개 이상이면 다중 선택이다. 기존에 selectedObject(단일)를 쓰던 코드는
+ * useFloorPlan에서 `selection.length === 1 ? selection[0] : null`로 그대로 파생해 쓰므로
+ * 변경 없이 동작한다.
  */
 export interface FloorPlanState {
   walls: Wall[];
@@ -27,7 +34,7 @@ export interface FloorPlanState {
   labels: TextLabel[];
   layers: Layer[];
   activeLayerId: string;
-  selectedObject: SelectedObject;
+  selection: SelectionItem[];
 }
 
 export const initialFloorPlanState: FloorPlanState = {
@@ -40,7 +47,7 @@ export const initialFloorPlanState: FloorPlanState = {
   labels: [],
   layers: [{ id: DEFAULT_LAYER_ID, name: '레이어 1', visible: true }],
   activeLayerId: DEFAULT_LAYER_ID,
-  selectedObject: null,
+  selection: [],
 };
 
 export type FloorPlanAction =
@@ -65,7 +72,10 @@ export type FloorPlanAction =
   | { type: 'ADD_LABEL'; label: TextLabel }
   | { type: 'UPDATE_LABEL'; id: string; patch: Partial<Omit<TextLabel, 'id'>>; transient?: boolean }
   | { type: 'DELETE_LABEL'; id: string }
+  | { type: 'DELETE_MANY'; items: SelectionItem[] }
   | { type: 'SELECT_OBJECT'; selection: SelectedObject }
+  | { type: 'TOGGLE_SELECT_OBJECT'; item: SelectionItem }
+  | { type: 'SET_SELECTION'; items: SelectionItem[] }
   | { type: 'ADD_LAYER'; layer: Layer }
   | { type: 'RENAME_LAYER'; id: string; name: string }
   | { type: 'TOGGLE_LAYER_VISIBILITY'; id: string }
@@ -73,8 +83,8 @@ export type FloorPlanAction =
   | { type: 'SET_ACTIVE_LAYER'; id: string }
   | { type: 'MOVE_OBJECT_TO_LAYER'; kind: ObjectKind; id: string; layerId: string };
 
-function clearSelectionIfMatches(state: FloorPlanState, kind: ObjectKind, id: string): SelectedObject {
-  return state.selectedObject?.kind === kind && state.selectedObject.id === id ? null : state.selectedObject;
+function removeFromSelection(selection: SelectionItem[], kind: ObjectKind, id: string): SelectionItem[] {
+  return selection.filter((item) => !(item.kind === kind && item.id === id));
 }
 
 export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction): FloorPlanState {
@@ -83,7 +93,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         walls: [...state.walls, action.wall],
-        selectedObject: { kind: 'wall', id: action.wall.id },
+        selection: [{ kind: 'wall', id: action.wall.id }],
       };
 
     case 'UPDATE_WALL':
@@ -99,14 +109,14 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         walls: state.walls.filter((wall) => wall.id !== action.id),
         doors: state.doors.filter((door) => door.wallId !== action.id),
         windows: state.windows.filter((win) => win.wallId !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'wall', action.id),
+        selection: removeFromSelection(state.selection, 'wall', action.id),
       };
 
     case 'ADD_FURNITURE':
       return {
         ...state,
         furniture: [...state.furniture, action.furniture],
-        selectedObject: { kind: 'furniture', id: action.furniture.id },
+        selection: [{ kind: 'furniture', id: action.furniture.id }],
       };
 
     case 'UPDATE_FURNITURE':
@@ -119,11 +129,11 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         furniture: state.furniture.filter((item) => item.id !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'furniture', action.id),
+        selection: removeFromSelection(state.selection, 'furniture', action.id),
       };
 
     case 'ADD_DOOR':
-      return { ...state, doors: [...state.doors, action.door], selectedObject: { kind: 'door', id: action.door.id } };
+      return { ...state, doors: [...state.doors, action.door], selection: [{ kind: 'door', id: action.door.id }] };
 
     case 'UPDATE_DOOR':
       return { ...state, doors: state.doors.map((door) => (door.id === action.id ? { ...door, ...action.patch } : door)) };
@@ -132,11 +142,11 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         doors: state.doors.filter((door) => door.id !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'door', action.id),
+        selection: removeFromSelection(state.selection, 'door', action.id),
       };
 
     case 'ADD_WINDOW':
-      return { ...state, windows: [...state.windows, action.window], selectedObject: { kind: 'window', id: action.window.id } };
+      return { ...state, windows: [...state.windows, action.window], selection: [{ kind: 'window', id: action.window.id }] };
 
     case 'UPDATE_WINDOW':
       return { ...state, windows: state.windows.map((win) => (win.id === action.id ? { ...win, ...action.patch } : win)) };
@@ -145,11 +155,11 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         windows: state.windows.filter((win) => win.id !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'window', action.id),
+        selection: removeFromSelection(state.selection, 'window', action.id),
       };
 
     case 'ADD_OUTLET':
-      return { ...state, outlets: [...state.outlets, action.outlet], selectedObject: { kind: 'outlet', id: action.outlet.id } };
+      return { ...state, outlets: [...state.outlets, action.outlet], selection: [{ kind: 'outlet', id: action.outlet.id }] };
 
     case 'UPDATE_OUTLET':
       return {
@@ -161,11 +171,11 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         outlets: state.outlets.filter((outlet) => outlet.id !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'outlet', action.id),
+        selection: removeFromSelection(state.selection, 'outlet', action.id),
       };
 
     case 'ADD_PATH':
-      return { ...state, paths: [...state.paths, action.path], selectedObject: { kind: 'path', id: action.path.id } };
+      return { ...state, paths: [...state.paths, action.path], selection: [{ kind: 'path', id: action.path.id }] };
 
     case 'UPDATE_PATH':
       return { ...state, paths: state.paths.map((path) => (path.id === action.id ? { ...path, ...action.patch } : path)) };
@@ -174,11 +184,11 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         paths: state.paths.filter((path) => path.id !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'path', action.id),
+        selection: removeFromSelection(state.selection, 'path', action.id),
       };
 
     case 'ADD_LABEL':
-      return { ...state, labels: [...state.labels, action.label], selectedObject: { kind: 'label', id: action.label.id } };
+      return { ...state, labels: [...state.labels, action.label], selection: [{ kind: 'label', id: action.label.id }] };
 
     case 'UPDATE_LABEL':
       return { ...state, labels: state.labels.map((label) => (label.id === action.id ? { ...label, ...action.patch } : label)) };
@@ -187,11 +197,49 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return {
         ...state,
         labels: state.labels.filter((label) => label.id !== action.id),
-        selectedObject: clearSelectionIfMatches(state, 'label', action.id),
+        selection: removeFromSelection(state.selection, 'label', action.id),
       };
 
+    case 'DELETE_MANY': {
+      // 다중 선택 삭제를 한 건의 액션(=한 건의 Undo 기록)으로 처리한다.
+      const ids: Record<ObjectKind, Set<string>> = {
+        wall: new Set(),
+        furniture: new Set(),
+        door: new Set(),
+        window: new Set(),
+        outlet: new Set(),
+        path: new Set(),
+        label: new Set(),
+      };
+      for (const item of action.items) ids[item.kind].add(item.id);
+
+      return {
+        ...state,
+        // 벽이 삭제 대상이면 그 벽에 달린 문/창문도 함께 사라진다 (DELETE_WALL과 동일한 규칙).
+        walls: state.walls.filter((w) => !ids.wall.has(w.id)),
+        doors: state.doors.filter((d) => !ids.door.has(d.id) && !ids.wall.has(d.wallId)),
+        windows: state.windows.filter((w) => !ids.window.has(w.id) && !ids.wall.has(w.wallId)),
+        furniture: state.furniture.filter((f) => !ids.furniture.has(f.id)),
+        outlets: state.outlets.filter((o) => !ids.outlet.has(o.id)),
+        paths: state.paths.filter((p) => !ids.path.has(p.id)),
+        labels: state.labels.filter((l) => !ids.label.has(l.id)),
+        selection: [],
+      };
+    }
+
     case 'SELECT_OBJECT':
-      return { ...state, selectedObject: action.selection };
+      return { ...state, selection: action.selection ? [action.selection] : [] };
+
+    case 'TOGGLE_SELECT_OBJECT': {
+      const exists = state.selection.some((s) => s.kind === action.item.kind && s.id === action.item.id);
+      return {
+        ...state,
+        selection: exists ? removeFromSelection(state.selection, action.item.kind, action.item.id) : [...state.selection, action.item],
+      };
+    }
+
+    case 'SET_SELECTION':
+      return { ...state, selection: action.items };
 
     case 'ADD_LAYER':
       return { ...state, layers: [...state.layers, action.layer], activeLayerId: action.layer.id };
@@ -254,11 +302,14 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
 }
 
 /**
- * SELECT_OBJECT(선택 변경)와 transient:true로 표시된 액션(드래그 도중의 중간 갱신)만
- * 히스토리에서 제외한다. 드래그가 끝나면 usePlanInteraction이 commit()으로 "시작→끝"을
- * 한 건만 기록하므로, 그 외 데이터 변경 액션은 모두 그대로 Undo/Redo 대상이다.
+ * SELECT_OBJECT/TOGGLE_SELECT_OBJECT/SET_SELECTION(선택 변경)과 transient:true로 표시된
+ * 액션(드래그 도중의 중간 갱신)만 히스토리에서 제외한다. 드래그가 끝나면 usePlanInteraction이
+ * commit()으로 "시작→끝"을 한 건만 기록하므로, 그 외 데이터 변경 액션은 모두 그대로
+ * Undo/Redo 대상이다. DELETE_MANY(다중 선택 삭제)는 다른 삭제 액션과 마찬가지로 그대로 기록된다.
  */
+const SELECTION_ONLY_ACTIONS = new Set<FloorPlanAction['type']>(['SELECT_OBJECT', 'TOGGLE_SELECT_OBJECT', 'SET_SELECTION']);
+
 export const historyFloorPlanReducer = createHistoryReducer<FloorPlanState, FloorPlanAction>(
   floorPlanReducer,
-  (action) => action.type !== 'SELECT_OBJECT' && !('transient' in action && action.transient),
+  (action) => !SELECTION_ONLY_ACTIONS.has(action.type) && !('transient' in action && action.transient),
 );

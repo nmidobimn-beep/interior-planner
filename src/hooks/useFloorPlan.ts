@@ -17,6 +17,7 @@ import {
   type FloorPlanState,
   type ObjectKind,
   type SelectedObject,
+  type SelectionItem,
 } from '../state/floorPlanReducer';
 import { commit, REDO, reset, UNDO, type HistoryState } from '../state/history';
 import {
@@ -243,61 +244,59 @@ export function useFloorPlan() {
     dispatch({ type: 'SELECT_OBJECT', selection: null });
   }, []);
 
-  const deleteSelected = useCallback(() => {
-    const selection = state.selectedObject;
-    if (!selection) return;
-    switch (selection.kind) {
-      case 'wall':
-        deleteWall(selection.id);
-        break;
-      case 'furniture':
-        deleteFurniture(selection.id);
-        break;
-      case 'door':
-        deleteDoor(selection.id);
-        break;
-      case 'window':
-        deleteWindow(selection.id);
-        break;
-      case 'outlet':
-        deleteOutlet(selection.id);
-        break;
-      case 'path':
-        deletePath(selection.id);
-        break;
-      case 'label':
-        deleteLabel(selection.id);
-        break;
-    }
-  }, [deleteDoor, deleteFurniture, deleteLabel, deleteOutlet, deletePath, deleteWall, deleteWindow, state.selectedObject]);
+  /** Shift+클릭 등으로 다중 선택 목록에 객체 하나를 추가/제거한다. */
+  const toggleSelectObject = useCallback((kind: ObjectKind, id: string) => {
+    dispatch({ type: 'TOGGLE_SELECT_OBJECT', item: { kind, id } });
+  }, []);
 
-  const selectedWall = useMemo(
-    () => findSelected(state.selectedObject, 'wall', state.walls),
-    [state.walls, state.selectedObject],
+  /** 영역 드래그 선택 등으로 선택 목록 전체를 한 번에 교체한다. */
+  const setSelection = useCallback((items: SelectionItem[]) => {
+    dispatch({ type: 'SET_SELECTION', items });
+  }, []);
+
+  const isSelected = useCallback(
+    (kind: ObjectKind, id: string) => state.selection.some((item) => item.kind === kind && item.id === id),
+    [state.selection],
   );
+
+  /** 선택된 객체를 모두 삭제한다 — 여러 개를 선택했어도 Undo 기록은 한 건이다. */
+  const deleteSelected = useCallback(() => {
+    if (state.selection.length === 0) return;
+    dispatch({ type: 'DELETE_MANY', items: state.selection });
+  }, [state.selection]);
+
+  // 기존 단일 선택 코드(선택된 벽/가구/문/... 각각의 상세 정보와 속성 패널)가 변경 없이 그대로
+  // 동작하도록, "정확히 하나만 선택된 경우"에는 예전과 동일한 단일 selectedObject로 파생해준다.
+  // 0개 또는 2개 이상 선택된 경우엔 null이 되어(=단일 상세 패널이 안 보여) 자연스럽게
+  // "다중 선택" 상태로 취급된다.
+  const selectedObject: SelectedObject = useMemo(
+    () => (state.selection.length === 1 ? state.selection[0] : null),
+    [state.selection],
+  );
+
+  const selectedWall = useMemo(() => findSelected(selectedObject, 'wall', state.walls), [state.walls, selectedObject]);
   const selectedFurniture = useMemo(
-    () => findSelected(state.selectedObject, 'furniture', state.furniture),
-    [state.furniture, state.selectedObject],
+    () => findSelected(selectedObject, 'furniture', state.furniture),
+    [state.furniture, selectedObject],
   );
-  const selectedDoor = useMemo(
-    () => findSelected(state.selectedObject, 'door', state.doors),
-    [state.doors, state.selectedObject],
+  const selectedDoor = useMemo(() => findSelected(selectedObject, 'door', state.doors), [state.doors, selectedObject]);
+  const selectedWindow = useMemo(() => findSelected(selectedObject, 'window', state.windows), [state.windows, selectedObject]);
+  const selectedOutlet = useMemo(() => findSelected(selectedObject, 'outlet', state.outlets), [state.outlets, selectedObject]);
+  const selectedPath = useMemo(() => findSelected(selectedObject, 'path', state.paths), [state.paths, selectedObject]);
+  const selectedLabel = useMemo(() => findSelected(selectedObject, 'label', state.labels), [state.labels, selectedObject]);
+
+  const selectedFurnitureIds = useMemo(
+    () => new Set(state.selection.filter((s) => s.kind === 'furniture').map((s) => s.id)),
+    [state.selection],
   );
-  const selectedWindow = useMemo(
-    () => findSelected(state.selectedObject, 'window', state.windows),
-    [state.windows, state.selectedObject],
+  const selectedOutletIds = useMemo(
+    () => new Set(state.selection.filter((s) => s.kind === 'outlet').map((s) => s.id)),
+    [state.selection],
   );
-  const selectedOutlet = useMemo(
-    () => findSelected(state.selectedObject, 'outlet', state.outlets),
-    [state.outlets, state.selectedObject],
-  );
-  const selectedPath = useMemo(
-    () => findSelected(state.selectedObject, 'path', state.paths),
-    [state.paths, state.selectedObject],
-  );
-  const selectedLabel = useMemo(
-    () => findSelected(state.selectedObject, 'label', state.labels),
-    [state.labels, state.selectedObject],
+  const selectedPathIds = useMemo(() => new Set(state.selection.filter((s) => s.kind === 'path').map((s) => s.id)), [state.selection]);
+  const selectedLabelIds = useMemo(
+    () => new Set(state.selection.filter((s) => s.kind === 'label').map((s) => s.id)),
+    [state.selection],
   );
 
   const copySelected = useCallback(() => {
@@ -480,7 +479,7 @@ export function useFloorPlan() {
     visibleLabels,
     layers: state.layers,
     activeLayerId: state.activeLayerId,
-    selectedObject: state.selectedObject,
+    selectedObject,
     selectedWall,
     selectedFurniture,
     selectedDoor,
@@ -518,7 +517,16 @@ export function useFloorPlan() {
     selectLabel,
     deselect,
     deleteSelected,
-    canCopy: state.selectedObject !== null,
+    selection: state.selection,
+    selectionCount: state.selection.length,
+    toggleSelectObject,
+    setSelection,
+    isSelected,
+    selectedFurnitureIds,
+    selectedOutletIds,
+    selectedPathIds,
+    selectedLabelIds,
+    canCopy: selectedObject !== null,
     canPaste: clipboard !== null,
     copySelected,
     pasteClipboard,

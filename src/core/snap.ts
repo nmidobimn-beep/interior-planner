@@ -93,3 +93,32 @@ function snapToGrid(point: Point, gridMm: number): Point {
     y: Math.round(point.y / gridMm) * gridMm,
   };
 }
+
+export interface SnapDeltaResult {
+  delta: Point;
+  kind: SnapKind;
+}
+
+/**
+ * 다중 선택 그룹 이동용 스냅. 그룹을 대표하는 여러 점(바운딩 박스 모서리 4개 + 중심 등)을
+ * 각각 후보점과 비교해, 허용 거리 안에서 가장 가까운 조합 하나만 채택한다 — 그 조합이 만드는
+ * 이동량(delta)을 그룹 전체에 동일하게 적용하면 된다. 맞는 후보가 없으면 스냅하지 않는다
+ * (grid 스냅은 임의의 모서리를 격자에 맞추면 오히려 부자연스러워 그룹 이동에는 적용하지 않는다).
+ */
+export function snapGroupDelta(movingPoints: Point[], candidatePoints: Point[], scale: number, enabled: boolean): SnapDeltaResult {
+  if (!enabled) return { delta: { x: 0, y: 0 }, kind: null };
+
+  const toleranceMm = SNAP_ENDPOINT_RADIUS_PX / scale;
+  let best: { delta: Point; dist: number } | null = null;
+
+  for (const moving of movingPoints) {
+    for (const candidate of candidatePoints) {
+      const d = distance(moving, candidate);
+      if (d <= toleranceMm && (!best || d < best.dist)) {
+        best = { delta: { x: candidate.x - moving.x, y: candidate.y - moving.y }, dist: d };
+      }
+    }
+  }
+
+  return best ? { delta: best.delta, kind: 'endpoint' } : { delta: { x: 0, y: 0 }, kind: null };
+}

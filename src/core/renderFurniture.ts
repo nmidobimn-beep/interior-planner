@@ -15,9 +15,14 @@ function toScreenPath(ctx: CanvasRenderingContext2D, viewport: Viewport, points:
   ctx.closePath();
 }
 
-export function drawFurniture(ctx: CanvasRenderingContext2D, viewport: Viewport, furnitureList: Furniture[], selectedId: string | null) {
+export function drawFurniture(
+  ctx: CanvasRenderingContext2D,
+  viewport: Viewport,
+  furnitureList: Furniture[],
+  selectedIds: ReadonlySet<string>,
+) {
   for (const item of furnitureList) {
-    const isSelected = item.id === selectedId;
+    const isSelected = selectedIds.has(item.id);
     const center = worldToScreen(viewport, { x: item.x, y: item.y });
 
     ctx.fillStyle = isSelected ? COLORS.furnitureSelectedFill : hexToRgba(item.color, 0.18);
@@ -47,8 +52,12 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, viewport: Viewport,
     ctx.textBaseline = 'alphabetic';
   }
 
-  const selected = furnitureList.find((item) => item.id === selectedId);
-  if (selected) drawRotationHandle(ctx, viewport, selected);
+  // 회전 손잡이는 정확히 하나만 선택됐을 때만 보여준다 (다중 선택 시엔 그룹 회전 손잡이를 대신 씀).
+  if (selectedIds.size === 1) {
+    const onlyId = selectedIds.values().next().value;
+    const selected = furnitureList.find((item) => item.id === onlyId);
+    if (selected) drawRotationHandle(ctx, viewport, selected);
+  }
 }
 
 function drawRotationHandle(ctx: CanvasRenderingContext2D, viewport: Viewport, furniture: Furniture) {

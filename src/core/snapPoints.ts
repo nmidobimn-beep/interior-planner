@@ -21,6 +21,9 @@ export interface SnapExclude {
   wallId?: string;
   furnitureId?: string;
   pathId?: string;
+  /** 다중 선택 이동/회전 중 그룹 전체를 후보에서 뺄 때 쓴다(furnitureId/pathId와 함께 적용됨). */
+  furnitureIds?: string[];
+  pathIds?: string[];
 }
 
 /**
@@ -56,21 +59,21 @@ export function collectSnapCandidates(
     }
     for (const outlet of outlets) points.push({ x: outlet.x, y: outlet.y });
     for (const path of paths) {
-      if (path.id === exclude.pathId) continue;
+      if (path.id === exclude.pathId || exclude.pathIds?.includes(path.id)) continue;
       points.push(path.start, path.end);
     }
   }
 
   if (categories.center) {
     for (const item of furniture) {
-      if (item.id === exclude.furnitureId) continue;
+      if (item.id === exclude.furnitureId || exclude.furnitureIds?.includes(item.id)) continue;
       points.push({ x: item.x, y: item.y });
     }
   }
 
   if (categories.corner) {
     for (const item of furniture) {
-      if (item.id === exclude.furnitureId) continue;
+      if (item.id === exclude.furnitureId || exclude.furnitureIds?.includes(item.id)) continue;
       const polygon = toWorldPolygon(item);
       if (polygon) points.push(...polygon);
     }

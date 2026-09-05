@@ -19,9 +19,11 @@ function strokePathShape(ctx: CanvasRenderingContext2D, viewport: Viewport, path
   ctx.stroke();
 }
 
-export function drawPaths(ctx: CanvasRenderingContext2D, viewport: Viewport, paths: Path[], selectedId: string | null) {
+export function drawPaths(ctx: CanvasRenderingContext2D, viewport: Viewport, paths: Path[], selectedIds: ReadonlySet<string>) {
+  // 끝점/곡선 조절점 손잡이는 정확히 하나만 선택됐을 때만 보여준다 (다중 선택 시엔 그룹 손잡이를 대신 씀).
+  const showHandles = selectedIds.size === 1;
   for (const path of paths) {
-    const isSelected = path.id === selectedId;
+    const isSelected = selectedIds.has(path.id);
     const color = isSelected ? COLORS.pathSelected : COLORS.path;
 
     ctx.strokeStyle = color;
@@ -42,7 +44,7 @@ export function drawPaths(ctx: CanvasRenderingContext2D, viewport: Viewport, pat
       ctx.fill();
     }
 
-    if (isSelected) {
+    if (isSelected && showHandles) {
       const start = worldToScreen(viewport, path.start);
       const end = worldToScreen(viewport, path.end);
       for (const point of [start, end]) {

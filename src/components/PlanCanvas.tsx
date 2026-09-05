@@ -8,6 +8,8 @@ import { drawFurniture } from '../core/renderFurniture';
 import { drawDoors, drawOutlets, drawWindows } from '../core/renderOpenings';
 import { drawPathPreview, drawPaths } from '../core/renderPath';
 import { drawLabels } from '../core/renderLabel';
+import { computeSelectionBounds } from '../core/multiSelectGeometry';
+import { drawSelectionBounds, drawSelectionMarquee } from '../core/renderSelection';
 import type { UseViewportResult } from '../hooks/useViewport';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
@@ -41,6 +43,12 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selection,
+    selectionCount,
+    selectedFurnitureIds,
+    selectedOutletIds,
+    selectedPathIds,
+    selectedLabelIds,
   } = floorPlan;
   const {
     activeTool,
@@ -49,6 +57,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     chainStart,
     previewPoint,
     previewSnapKind,
+    selectionBox,
     onPointerDown,
     onPointerMove,
     onPointerUp,
@@ -100,10 +109,16 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     drawWalls(ctx, viewport, walls, selectedWall?.id ?? null);
     drawDoors(ctx, viewport, doors, walls, selectedDoor?.id ?? null);
     drawWindows(ctx, viewport, windows, walls, selectedWindow?.id ?? null);
-    drawFurniture(ctx, viewport, furniture, selectedFurniture?.id ?? null);
-    drawOutlets(ctx, viewport, outlets, selectedOutlet?.id ?? null);
-    drawPaths(ctx, viewport, paths, selectedPath?.id ?? null);
-    drawLabels(ctx, viewport, labels, selectedLabel?.id ?? null);
+    drawFurniture(ctx, viewport, furniture, selectedFurnitureIds);
+    drawOutlets(ctx, viewport, outlets, selectedOutletIds);
+    drawPaths(ctx, viewport, paths, selectedPathIds);
+    drawLabels(ctx, viewport, labels, selectedLabelIds);
+
+    // 다중 선택(2개 이상)일 때는 개별 손잡이 대신 전체를 감싸는 바운딩 박스 + 그룹 회전 손잡이를 보여준다.
+    if (selectionCount > 1) {
+      const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels });
+      if (bounds) drawSelectionBounds(ctx, viewport, bounds);
+    }
 
     if (chainStart && previewPoint) {
       if (activeTool === 'path') drawPathPreview(ctx, viewport, chainStart, previewPoint);
@@ -111,6 +126,10 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     }
     if (previewPoint) {
       drawSnapIndicator(ctx, viewport, previewPoint, previewSnapKind);
+    }
+
+    if (selectionBox) {
+      drawSelectionMarquee(ctx, viewport, selectionBox.start, selectionBox.end);
     }
 
     drawRulers(ctx, viewport, size, displayUnit);
@@ -132,10 +151,17 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     selectedOutlet,
     selectedPath,
     selectedLabel,
+    selection,
+    selectionCount,
+    selectedFurnitureIds,
+    selectedOutletIds,
+    selectedPathIds,
+    selectedLabelIds,
     activeTool,
     chainStart,
     previewPoint,
     previewSnapKind,
+    selectionBox,
     defaultWallThicknessMm,
     displayUnit,
   ]);

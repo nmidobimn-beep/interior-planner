@@ -128,6 +128,12 @@ export interface SnapCategoryFlags {
 }
 export const DEFAULT_SNAP_CATEGORIES: SnapCategoryFlags = { endpoint: true, center: true, corner: true };
 
+/** --- 다중 선택 --- */
+/** 다중 선택된 객체들을 감싸는 바운딩 박스가 개별 객체 테두리와 겹치지 않도록 두는 여백(mm) */
+export const MULTI_SELECT_BOUNDS_PADDING_MM = 80;
+/** 영역 드래그 선택 중, 클릭인지 실제 드래그인지 구분하는 최소 이동 거리(px) */
+export const BOX_SELECT_MIN_DRAG_PX = 4;
+
 export const COLORS = {
   background: '#f5f6f8',
   gridMinor: '#e4e6eb',
@@ -177,4 +183,9 @@ export const COLORS = {
   labelText: '#1f2937',
   labelSelectedText: '#1d4fc4',
   labelSelectedBox: '#1d4fc4',
+
+  multiSelectBounds: '#e0872f',
+  multiSelectFill: 'rgba(224, 135, 47, 0.35)',
+  marqueeFill: 'rgba(47, 111, 237, 0.10)',
+  marqueeStroke: 'rgba(47, 111, 237, 0.7)',
 } as const;

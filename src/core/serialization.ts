@@ -93,7 +93,7 @@ export function documentToState(doc: FloorPlanDocument): FloorPlanState {
     labels: doc.labels ?? [],
     layers: doc.layers,
     activeLayerId: doc.activeLayerId,
-    selectedObject: null,
+    selection: [],
   };
 }
 

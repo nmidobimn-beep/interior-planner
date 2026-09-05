@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
-import type { Point } from '../types/geometry';
+import type { Bounds, Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Path } from '../types/path';
 import type { FurnitureShape } from '../types/furniture';
+import type { ObjectKind, SelectionItem } from '../state/floorPlanReducer';
 import {
   DEFAULT_ARM_THICKNESS_MM,
   DEFAULT_DOOR_WIDTH_MM,
@@ -13,6 +14,7 @@ import {
   DEFAULT_WALL_LENGTH_SNAP_MM,
   DEFAULT_WALL_THICKNESS_MM,
   DEFAULT_WINDOW_WIDTH_MM,
+  BOX_SELECT_MIN_DRAG_PX,
   CURVE_CONTROL_HANDLE_RADIUS_PX,
   FURNITURE_HANDLE_RADIUS_PX,
   LABEL_HIT_RADIUS_PX,
@@ -26,7 +28,7 @@ import {
   type SnapCategoryFlags,
 } from '../config/constants';
 import { screenToWorld, worldToScreen, type Viewport } from '../core/viewport';
-import { snapAngleDeg, snapPoint, type SnapKind } from '../core/snap';
+import { snapAngleDeg, snapGroupDelta, snapPoint, type SnapKind } from '../core/snap';
 import { nextDisplayUnit, type DisplayUnit } from '../core/units';
 import {
   distance,
@@ -41,6 +43,8 @@ import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from
 import { defaultControlPoint, hitTestPaths } from '../core/pathGeometry';
 import { hitTestLabels } from '../core/labelGeometry';
 import { collectSnapCandidates } from '../core/snapPoints';
+import { computeSelectionBounds, hitTestBoxSelection, rotatePointAround, selectionKeyPoints } from '../core/multiSelectGeometry';
+import { groupRotationHandleWorldPoint } from '../core/renderSelection';
 import type { UseFloorPlanResult } from './useFloorPlan';
 
 export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet' | 'path' | 'label';
@@ -48,8 +52,16 @@ export type PathShape = 'straight' | 'curve';
 
 type PathEndpointKey = 'start' | 'end';
 
+/** 다중 선택 그룹 이동/회전을 시작할 때, 각 객체의 "시작 상태"를 담아두는 스냅샷. */
+type SelectionMemberSnapshot =
+  | { kind: 'furniture'; id: string; x: number; y: number; rotationDeg: number }
+  | { kind: 'outlet'; id: string; x: number; y: number }
+  | { kind: 'label'; id: string; x: number; y: number }
+  | { kind: 'path'; id: string; start: Point; end: Point; controlPoint?: Point };
+
 type DragState =
   | { type: 'pan'; lastClient: Point }
+  | { type: 'boxSelect'; startWorld: Point; additive: boolean }
   | { type: 'moveWall'; wallId: string; original: Wall; grabWorld: Point }
   | { type: 'endpointDrag'; wallId: string; key: WallEndpointKey; original: Wall }
   | { type: 'moveFurniture'; furnitureId: string; original: Point; grabWorld: Point }
@@ -60,7 +72,9 @@ type DragState =
   | { type: 'movePath'; pathId: string; original: { start: Point; end: Point }; grabWorld: Point }
   | { type: 'pathEndpointDrag'; pathId: string; key: PathEndpointKey; original: Point }
   | { type: 'curveControlDrag'; pathId: string; original: Point }
-  | { type: 'moveLabel'; labelId: string; original: Point; grabWorld: Point };
+  | { type: 'moveLabel'; labelId: string; original: Point; grabWorld: Point }
+  | { type: 'moveSelection'; members: SelectionMemberSnapshot[]; initialBounds: Bounds | null; grabWorld: Point; clickedItem: SelectionItem }
+  | { type: 'rotateSelection'; members: SelectionMemberSnapshot[]; pivot: Point; startAngleDeg: number };
 
 interface UsePlanInteractionArgs {
   viewport: Viewport;
@@ -87,16 +101,39 @@ function pointsEqual(a: Point, b: Point): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+function selectionKey(item: SelectionItem): string {
+  return `${item.kind}:${item.id}`;
+}
+
+/** 기존 선택에 새 항목들을 합친다(이미 있는 항목은 중복 추가하지 않음) — 영역 선택에 Shift를 누른 경우. */
+function mergeSelections(existing: SelectionItem[], additions: SelectionItem[]): SelectionItem[] {
+  const seen = new Set(existing.map(selectionKey));
+  const merged = [...existing];
+  for (const item of additions) {
+    if (!seen.has(selectionKey(item))) {
+      merged.push(item);
+      seen.add(selectionKey(item));
+    }
+  }
+  return merged;
+}
+
 /**
  * 캔버스 위 마우스/키보드 조작을 총괄하는 훅.
- * "빈 캔버스 드래그 = 화면 이동, 객체 클릭 = 선택/이동" 처럼 도구(activeTool)에 따라
+ * "빈 캔버스 드래그 = 영역 선택, 객체 클릭 = 선택/이동" 처럼 도구(activeTool)에 따라
  * 같은 왼쪽 버튼 드래그를 다르게 해석하는 판단을 여기서 전담하고, 실제 카메라 이동은
  * useViewport에, 실제 데이터 변경은 useFloorPlan에 위임한다.
  *
  * Undo 기록 방식: 드래그(이동/회전/리사이즈) 도중에는 update*(..., transient=true)로
  * 화면만 갱신하고 History에는 쌓지 않는다. 드래그가 끝나는 순간(endDrag) 실제로 값이
  * 바뀌었는지 확인해, 바뀌었으면 commitTransientEdit()으로 "시작→끝"을 History 한 건으로
- * 기록하고, 바뀐 게 없으면(클릭만 하고 끝난 경우 등) 아무 기록도 남기지 않는다.
+ * 기록하고, 바뀐 게 없으면(클릭만 하고 끝난 경우 등) 아무 기록도 남기지 않는다. 다중 선택
+ * 이동/회전도 beginTransientEdit()이 도면 전체 상태를 한 번에 캡처해두므로, 객체 개수와
+ * 무관하게 동일한 방식으로 "한 건"으로 기록된다.
+ *
+ * 다중 선택(Shift+클릭 / 영역 드래그)은 가구·콘센트·동선·라벨만 대상으로 한다 — 벽/문/창문
+ * 같은 구조 객체는 기존 단일 선택 흐름을 그대로 유지한다(요청에서도 구조 객체는 안전한
+ * 경우에만 포함하라고 명시).
  */
 export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanInteractionArgs) {
   const {
@@ -110,6 +147,11 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     selectedWall,
     selectedFurniture,
     selectedPath,
+    selection,
+    selectionCount,
+    isSelected,
+    toggleSelectObject,
+    setSelection,
     addWall,
     updateWall,
     addFurniture,
@@ -158,6 +200,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   const [chainStart, setChainStart] = useState<Point | null>(null);
   const [previewPoint, setPreviewPoint] = useState<Point | null>(null);
   const [previewSnapKind, setPreviewSnapKind] = useState<SnapKind>(null);
+  const [selectionBox, setSelectionBox] = useState<{ start: Point; end: Point } | null>(null);
 
   const dragState = useRef<DragState | null>(null);
 
@@ -178,9 +221,62 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   }, []);
 
   const snapCandidates = useCallback(
-    (exclude?: { wallId?: string; furnitureId?: string; pathId?: string }) =>
+    (exclude?: { wallId?: string; furnitureId?: string; pathId?: string; furnitureIds?: string[]; pathIds?: string[] }) =>
       collectSnapCandidates({ walls, furniture, doors, windows, outlets, paths }, snapCategories, exclude),
     [doors, furniture, outlets, paths, snapCategories, walls, windows],
+  );
+
+  /** 다중 선택 이동/회전 시작 시, 선택된 각 객체의 현재 상태를 스냅샷으로 캡처한다. */
+  const buildSelectionSnapshot = useCallback(
+    (items: SelectionItem[]): SelectionMemberSnapshot[] => {
+      const result: SelectionMemberSnapshot[] = [];
+      for (const item of items) {
+        if (item.kind === 'furniture') {
+          const f = furniture.find((x) => x.id === item.id);
+          if (f) result.push({ kind: 'furniture', id: f.id, x: f.x, y: f.y, rotationDeg: f.rotationDeg });
+        } else if (item.kind === 'outlet') {
+          const o = outlets.find((x) => x.id === item.id);
+          if (o) result.push({ kind: 'outlet', id: o.id, x: o.x, y: o.y });
+        } else if (item.kind === 'label') {
+          const l = labels.find((x) => x.id === item.id);
+          if (l) result.push({ kind: 'label', id: l.id, x: l.x, y: l.y });
+        } else if (item.kind === 'path') {
+          const p = paths.find((x) => x.id === item.id);
+          if (p) result.push({ kind: 'path', id: p.id, start: p.start, end: p.end, controlPoint: p.controlPoint });
+        }
+      }
+      return result;
+    },
+    [furniture, outlets, labels, paths],
+  );
+
+  const memberIdsByKind = useCallback((members: SelectionMemberSnapshot[], kind: ObjectKind) => {
+    return members.filter((m) => m.kind === kind).map((m) => m.id);
+  }, []);
+
+  const selectSingleItem = useCallback(
+    (item: SelectionItem) => {
+      if (item.kind === 'furniture') selectFurniture(item.id);
+      else if (item.kind === 'outlet') selectOutlet(item.id);
+      else if (item.kind === 'path') selectPath(item.id);
+      else if (item.kind === 'label') selectLabel(item.id);
+    },
+    [selectFurniture, selectLabel, selectOutlet, selectPath],
+  );
+
+  const startMoveSelection = useCallback(
+    (worldRaw: Point, currentTarget: HTMLCanvasElement, pointerId: number, clickedItem: SelectionItem) => {
+      const members = buildSelectionSnapshot(selection);
+      if (members.length === 0) return false;
+      // 실제(회전 반영) 바운딩 박스를 드래그 시작 시점에 한 번만 계산해둔다 — 평행 이동이므로
+      // 드래그 도중에는 이 박스를 delta만큼 그대로 옮기면 된다(재계산 불필요).
+      const initialBounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels });
+      beginTransientEdit();
+      dragState.current = { type: 'moveSelection', members, initialBounds, grabWorld: worldRaw, clickedItem };
+      currentTarget.setPointerCapture(pointerId);
+      return true;
+    },
+    [beginTransientEdit, buildSelectionSnapshot, furniture, labels, outlets, paths, selection],
   );
 
   const onPointerDown = useCallback(
@@ -278,6 +374,24 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       }
 
       // --- 선택 도구 ---
+
+      // 다중 선택(2개 이상) 중 그룹 회전 손잡이를 눌렀는지 먼저 확인한다.
+      if (selectionCount > 1) {
+        const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels });
+        if (bounds) {
+          const handleScreen = worldToScreen(viewport, groupRotationHandleWorldPoint(bounds));
+          if (distance(screen, handleScreen) <= FURNITURE_HANDLE_RADIUS_PX * 1.5) {
+            const members = buildSelectionSnapshot(selection);
+            const center = { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 };
+            const startAngleDeg = (Math.atan2(worldRaw.y - center.y, worldRaw.x - center.x) * 180) / Math.PI;
+            beginTransientEdit();
+            dragState.current = { type: 'rotateSelection', members, pivot: center, startAngleDeg };
+            e.currentTarget.setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+      }
+
       if (selectedFurniture) {
         const handleScreen = worldToScreen(viewport, rotationHandleWorldPoint(selectedFurniture));
         if (distance(screen, handleScreen) <= FURNITURE_HANDLE_RADIUS_PX * 1.5) {
@@ -339,6 +453,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       const hitLabel = hitTestLabels(worldRaw, labels, LABEL_HIT_RADIUS_PX / viewport.scale);
       if (hitLabel) {
+        if (e.shiftKey) {
+          toggleSelectObject('label', hitLabel.id);
+          return;
+        }
+        if (isSelected('label', hitLabel.id) && selectionCount > 1) {
+          if (startMoveSelection(worldRaw, e.currentTarget, e.pointerId, { kind: 'label', id: hitLabel.id })) return;
+        }
         selectLabel(hitLabel.id);
         beginTransientEdit();
         dragState.current = {
@@ -353,6 +474,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       const hitFurniture = hitTestFurnitureList(worldRaw, furniture);
       if (hitFurniture) {
+        if (e.shiftKey) {
+          toggleSelectObject('furniture', hitFurniture.id);
+          return;
+        }
+        if (isSelected('furniture', hitFurniture.id) && selectionCount > 1) {
+          if (startMoveSelection(worldRaw, e.currentTarget, e.pointerId, { kind: 'furniture', id: hitFurniture.id })) return;
+        }
         selectFurniture(hitFurniture.id);
         beginTransientEdit();
         dragState.current = {
@@ -386,6 +514,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       const hitOutlet = hitTestOutlets(worldRaw, outlets, openingTolerance);
       if (hitOutlet) {
+        if (e.shiftKey) {
+          toggleSelectObject('outlet', hitOutlet.id);
+          return;
+        }
+        if (isSelected('outlet', hitOutlet.id) && selectionCount > 1) {
+          if (startMoveSelection(worldRaw, e.currentTarget, e.pointerId, { kind: 'outlet', id: hitOutlet.id })) return;
+        }
         selectOutlet(hitOutlet.id);
         beginTransientEdit();
         dragState.current = {
@@ -400,6 +535,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       const hitPath = hitTestPaths(worldRaw, paths, PATH_HIT_TOLERANCE_PX / viewport.scale);
       if (hitPath) {
+        if (e.shiftKey) {
+          toggleSelectObject('path', hitPath.id);
+          return;
+        }
+        if (isSelected('path', hitPath.id) && selectionCount > 1) {
+          if (startMoveSelection(worldRaw, e.currentTarget, e.pointerId, { kind: 'path', id: hitPath.id })) return;
+        }
         selectPath(hitPath.id);
         beginTransientEdit();
         dragState.current = {
@@ -421,8 +563,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
-      deselect();
-      dragState.current = { type: 'pan', lastClient: { x: e.clientX, y: e.clientY } };
+      // 빈 캔버스 클릭/드래그: 영역 선택을 시작한다(Shift를 누르면 기존 선택에 더한다).
+      // 화면 이동은 가운데 버튼 드래그로 한다.
+      setSelectionBox({ start: worldRaw, end: worldRaw });
+      dragState.current = { type: 'boxSelect', startWorld: worldRaw, additive: e.shiftKey };
       e.currentTarget.setPointerCapture(e.pointerId);
     },
     [
@@ -435,12 +579,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       addWall,
       addWindow,
       beginTransientEdit,
+      buildSelectionSnapshot,
       chainStart,
       defaultWallThicknessMm,
-      deselect,
       doors,
       furniture,
       getScreenPoint,
+      isSelected,
       labels,
       outlets,
       pathShape,
@@ -455,9 +600,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       selectedFurniture,
       selectedPath,
       selectedWall,
+      selection,
+      selectionCount,
       setActiveTool,
       snapCandidates,
       snapEnabled,
+      startMoveSelection,
+      toggleSelectObject,
       viewport,
       walls,
       wallLengthSnapMm,
@@ -477,6 +626,11 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         const dy = e.clientY - drag.lastClient.y;
         drag.lastClient = { x: e.clientX, y: e.clientY };
         panBy(dx, dy);
+        return;
+      }
+
+      if (drag?.type === 'boxSelect') {
+        setSelectionBox({ start: drag.startWorld, end: worldRaw });
         return;
       }
 
@@ -604,6 +758,83 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (drag?.type === 'moveSelection') {
+        const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
+
+        // 그룹 전체를 감싸는(회전 반영) 바운딩 박스의 모서리 4개 + 중심을 스냅 후보 지점으로 써서,
+        // 그룹 안 어느 한 지점이라도 다른 객체에 붙을 수 있게 한다(요청 23번: 성능을 위해
+        // 우선 바운딩 박스 기준점만 사용).
+        const candidatePoints = snapCandidates({
+          furnitureIds: memberIdsByKind(drag.members, 'furniture'),
+          pathIds: memberIdsByKind(drag.members, 'path'),
+        });
+        let finalDelta = rawDelta;
+        let snapKind: SnapKind = null;
+        if (drag.initialBounds) {
+          const movingKeyPoints = selectionKeyPoints(drag.initialBounds).map((p) => ({ x: p.x + rawDelta.x, y: p.y + rawDelta.y }));
+          const groupSnap = snapGroupDelta(movingKeyPoints, candidatePoints, viewport.scale, snapEnabled);
+          if (groupSnap.kind) {
+            finalDelta = { x: rawDelta.x + groupSnap.delta.x, y: rawDelta.y + groupSnap.delta.y };
+            snapKind = groupSnap.kind;
+          }
+        }
+
+        for (const member of drag.members) {
+          if (member.kind === 'furniture') {
+            updateFurniture(member.id, { x: member.x + finalDelta.x, y: member.y + finalDelta.y }, true);
+          } else if (member.kind === 'outlet') {
+            updateOutlet(member.id, { x: member.x + finalDelta.x, y: member.y + finalDelta.y }, true);
+          } else if (member.kind === 'label') {
+            updateLabel(member.id, { x: member.x + finalDelta.x, y: member.y + finalDelta.y }, true);
+          } else if (member.kind === 'path') {
+            updatePath(
+              member.id,
+              {
+                start: { x: member.start.x + finalDelta.x, y: member.start.y + finalDelta.y },
+                end: { x: member.end.x + finalDelta.x, y: member.end.y + finalDelta.y },
+                controlPoint: member.controlPoint
+                  ? { x: member.controlPoint.x + finalDelta.x, y: member.controlPoint.y + finalDelta.y }
+                  : undefined,
+              },
+              true,
+            );
+          }
+        }
+        setPreviewSnapKind(snapKind);
+        return;
+      }
+
+      if (drag?.type === 'rotateSelection') {
+        const currentAngleDeg = (Math.atan2(worldRaw.y - drag.pivot.y, worldRaw.x - drag.pivot.x) * 180) / Math.PI;
+        let deltaDeg = currentAngleDeg - drag.startAngleDeg;
+        if (snapEnabled) {
+          const normalized = ((deltaDeg % 360) + 360) % 360;
+          const snappedAbs = snapAngleDeg(normalized);
+          if (snappedAbs !== null) deltaDeg = snappedAbs;
+        }
+
+        for (const member of drag.members) {
+          if (member.kind === 'furniture') {
+            const rotated = rotatePointAround({ x: member.x, y: member.y }, drag.pivot, deltaDeg);
+            const newRotation = ((member.rotationDeg + deltaDeg) % 360 + 360) % 360;
+            updateFurniture(member.id, { x: rotated.x, y: rotated.y, rotationDeg: newRotation }, true);
+          } else if (member.kind === 'outlet') {
+            const rotated = rotatePointAround({ x: member.x, y: member.y }, drag.pivot, deltaDeg);
+            updateOutlet(member.id, { x: rotated.x, y: rotated.y }, true);
+          } else if (member.kind === 'label') {
+            const rotated = rotatePointAround({ x: member.x, y: member.y }, drag.pivot, deltaDeg);
+            updateLabel(member.id, { x: rotated.x, y: rotated.y }, true);
+          } else if (member.kind === 'path') {
+            const start = rotatePointAround(member.start, drag.pivot, deltaDeg);
+            const end = rotatePointAround(member.end, drag.pivot, deltaDeg);
+            const controlPoint = member.controlPoint ? rotatePointAround(member.controlPoint, drag.pivot, deltaDeg) : undefined;
+            updatePath(member.id, { start, end, controlPoint }, true);
+          }
+        }
+        setPreviewSnapKind(null);
+        return;
+      }
+
       if ((activeTool === 'wall' || activeTool === 'path') && chainStart) {
         const candidatePoints = snapCandidates();
         const snapped = snapPoint(worldRaw, {
@@ -626,6 +857,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       doors,
       furniture,
       getScreenPoint,
+      memberIdsByKind,
       panBy,
       paths,
       snapCandidates,
@@ -649,6 +881,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     (drag: DragState): boolean => {
       switch (drag.type) {
         case 'pan':
+        case 'boxSelect':
           return false;
         case 'moveWall': {
           const current = walls.find((w) => w.id === drag.wallId);
@@ -694,18 +927,67 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           const current = labels.find((l) => l.id === drag.labelId);
           return !!current && !pointsEqual({ x: current.x, y: current.y }, drag.original);
         }
+        case 'moveSelection':
+        case 'rotateSelection': {
+          for (const member of drag.members) {
+            if (member.kind === 'furniture') {
+              const current = furniture.find((f) => f.id === member.id);
+              if (current && (!pointsEqual({ x: current.x, y: current.y }, member) || current.rotationDeg !== member.rotationDeg)) {
+                return true;
+              }
+            } else if (member.kind === 'outlet') {
+              const current = outlets.find((o) => o.id === member.id);
+              if (current && !pointsEqual({ x: current.x, y: current.y }, member)) return true;
+            } else if (member.kind === 'label') {
+              const current = labels.find((l) => l.id === member.id);
+              if (current && !pointsEqual({ x: current.x, y: current.y }, member)) return true;
+            } else if (member.kind === 'path') {
+              const current = paths.find((p) => p.id === member.id);
+              if (current && (!pointsEqual(current.start, member.start) || !pointsEqual(current.end, member.end))) return true;
+            }
+          }
+          return false;
+        }
       }
     },
     [doors, furniture, labels, outlets, paths, walls, windows],
+  );
+
+  const finishBoxSelect = useCallback(
+    (drag: Extract<DragState, { type: 'boxSelect' }>, endWorld: Point) => {
+      const dragDistanceMm = distance(drag.startWorld, endWorld);
+      const isRealDrag = dragDistanceMm * viewport.scale >= BOX_SELECT_MIN_DRAG_PX;
+
+      if (!isRealDrag) {
+        // 클릭에 가까운 아주 작은 드래그는 "빈 곳 클릭"으로 취급한다. Shift가 눌려있으면
+        // 기존 다중 선택을 실수로 날리지 않도록 아무 것도 하지 않는다.
+        if (!drag.additive) deselect();
+        return;
+      }
+
+      const hits = hitTestBoxSelection(drag.startWorld, endWorld, { furniture, outlets, paths, labels });
+      setSelection(drag.additive ? mergeSelections(selection, hits) : hits);
+    },
+    [deselect, furniture, labels, outlets, paths, selection, setSelection, viewport.scale],
   );
 
   const endDrag = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       const drag = dragState.current;
       if (drag) {
-        if (drag.type !== 'pan') {
-          if (dragActuallyChanged(drag)) commitTransientEdit();
-          else discardTransientEdit();
+        if (drag.type === 'boxSelect') {
+          const screen = getScreenPoint(e);
+          finishBoxSelect(drag, screenToWorld(viewport, screen));
+          setSelectionBox(null);
+        } else if (drag.type !== 'pan') {
+          if (dragActuallyChanged(drag)) {
+            commitTransientEdit();
+          } else {
+            discardTransientEdit();
+            // moveSelection이 실제로는 움직이지 않은(=드래그가 아니라 그냥 클릭이었던) 경우,
+            // 흔한 관례대로 클릭한 객체 하나만 선택되도록 되돌린다(그룹 선택 유지 안 함).
+            if (drag.type === 'moveSelection') selectSingleItem(drag.clickedItem);
+          }
         }
         dragState.current = null;
         setPreviewSnapKind(null);
@@ -714,7 +996,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         }
       }
     },
-    [commitTransientEdit, dragActuallyChanged, discardTransientEdit],
+    [commitTransientEdit, dragActuallyChanged, discardTransientEdit, finishBoxSelect, getScreenPoint, selectSingleItem, viewport],
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => endDrag(e), [endDrag]);
@@ -789,6 +1071,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     chainStart,
     previewPoint,
     previewSnapKind,
+    selectionBox,
     onPointerDown,
     onPointerMove,
     onPointerUp,

@@ -135,9 +135,11 @@ export const DEMO_BOUNDS: Bounds = {
   maxY: 6700 + DEMO_MARGIN_MM,
 };
 
+const NO_SELECTION = new Set<string>();
+
 export function drawDemoScene(ctx: CanvasRenderingContext2D, viewport: Viewport) {
   drawWalls(ctx, viewport, DEMO_WALLS, null);
   drawDoors(ctx, viewport, DEMO_DOORS, DEMO_WALLS, null);
   drawWindows(ctx, viewport, DEMO_WINDOWS, DEMO_WALLS, null);
-  drawLabels(ctx, viewport, DEMO_LABELS, null);
+  drawLabels(ctx, viewport, DEMO_LABELS, NO_SELECTION);
 }

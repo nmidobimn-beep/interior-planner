@@ -78,9 +78,9 @@ export function drawWindows(ctx: CanvasRenderingContext2D, viewport: Viewport, w
   }
 }
 
-export function drawOutlets(ctx: CanvasRenderingContext2D, viewport: Viewport, outlets: Outlet[], selectedId: string | null) {
+export function drawOutlets(ctx: CanvasRenderingContext2D, viewport: Viewport, outlets: Outlet[], selectedIds: ReadonlySet<string>) {
   for (const outlet of outlets) {
-    const isSelected = outlet.id === selectedId;
+    const isSelected = selectedIds.has(outlet.id);
     const center = worldToScreen(viewport, outlet);
 
     ctx.beginPath();
