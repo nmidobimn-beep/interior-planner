@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Furniture, FurnitureShape } from '../types/furniture';
@@ -17,7 +17,14 @@ import {
   type ObjectKind,
   type SelectedObject,
 } from '../state/floorPlanReducer';
-import { REDO, UNDO, type HistoryState } from '../state/history';
+import { REDO, reset, UNDO, type HistoryState } from '../state/history';
+import {
+  AUTOSAVE_STORAGE_KEY,
+  documentToState,
+  parseFloorPlanDocument,
+  serializeFloorPlan,
+  type FloorPlanDocument,
+} from '../core/serialization';
 
 const FURNITURE_LABEL: Record<FurnitureShape, string> = {
   rectangle: '가구',
@@ -46,10 +53,42 @@ type ClipboardEntry =
 
 const initialHistory: HistoryState<FloorPlanState> = { past: [], present: initialFloorPlanState, future: [] };
 
+/** 마지막으로 작업하던 내용을 localStorage에서 복원한다 (없거나 손상됐으면 빈 도면으로 시작). */
+function restoreInitialHistory(): HistoryState<FloorPlanState> {
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+    if (!raw) return initialHistory;
+    const doc = parseFloorPlanDocument(JSON.parse(raw));
+    if (!doc) return initialHistory;
+    return { past: [], present: documentToState(doc), future: [] };
+  } catch {
+    return initialHistory;
+  }
+}
+
+const AUTOSAVE_DEBOUNCE_MS = 500;
+
 export function useFloorPlan() {
-  const [history, dispatch] = useReducer(historyFloorPlanReducer, initialHistory);
+  const [history, dispatch] = useReducer(historyFloorPlanReducer, undefined, restoreInitialHistory);
   const state = history.present;
   const [clipboard, setClipboard] = useState<ClipboardEntry | null>(null);
+
+  // 자동 저장: 편집이 멈추고 잠시 후 localStorage에 저장해, 새로고침해도 작업 내용이 남아있게 한다.
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(serializeFloorPlan(state)));
+      } catch {
+        // localStorage를 쓸 수 없는 환경(프라이빗 모드 등)에서는 조용히 무시한다.
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [state]);
 
   const addWall = useCallback(
     (start: Point, end: Point, thicknessMm: number): Wall => {
@@ -306,6 +345,26 @@ export function useFloorPlan() {
   const undo = useCallback(() => dispatch(UNDO), []);
   const redo = useCallback(() => dispatch(REDO), []);
 
+  const exportDocument = useCallback((): FloorPlanDocument => serializeFloorPlan(state), [state]);
+
+  const loadDocument = useCallback((input: unknown): boolean => {
+    const doc = parseFloorPlanDocument(input);
+    if (!doc) return false;
+    dispatch(reset(documentToState(doc)));
+    setClipboard(null);
+    return true;
+  }, []);
+
+  const newDocument = useCallback(() => {
+    dispatch(reset(initialFloorPlanState));
+    setClipboard(null);
+    try {
+      localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
+    } catch {
+      // 무시 — 다음 자동 저장 때 새 빈 도면으로 다시 덮어써진다.
+    }
+  }, []);
+
   const addLayer = useCallback(
     (name?: string) => {
       const layer: Layer = { id: createId(), name: name?.trim() || `레이어 ${state.layers.length + 1}`, visible: true };
@@ -387,6 +446,9 @@ export function useFloorPlan() {
     canRedo: history.future.length > 0,
     undo,
     redo,
+    exportDocument,
+    loadDocument,
+    newDocument,
     addLayer,
     renameLayer,
     toggleLayerVisibility,

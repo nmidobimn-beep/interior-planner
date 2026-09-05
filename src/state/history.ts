@@ -11,8 +11,14 @@ export interface HistoryState<S> {
 
 export const UNDO = { type: '@@history/UNDO' } as const;
 export const REDO = { type: '@@history/REDO' } as const;
+const RESET_TYPE = '@@history/RESET' as const;
 
-export type HistoryAction<A> = A | typeof UNDO | typeof REDO;
+/** 새 문서를 불러오거나 "새로 만들기"할 때 사용 — 히스토리(과거/미래)를 통째로 비우고 새 present로 교체한다. */
+export function reset<S>(payload: S) {
+  return { type: RESET_TYPE, payload };
+}
+
+export type HistoryAction<A> = A | typeof UNDO | typeof REDO | ReturnType<typeof reset>;
 
 const MAX_HISTORY = 100;
 
@@ -31,6 +37,10 @@ export function createHistoryReducer<S, A extends { type: string }>(
       if (state.future.length === 0) return state;
       const [next, ...rest] = state.future;
       return { past: [...state.past, state.present], present: next, future: rest };
+    }
+
+    if (action.type === RESET_TYPE) {
+      return { past: [], present: (action as ReturnType<typeof reset<S>>).payload, future: [] };
     }
 
     const typedAction = action as A;
