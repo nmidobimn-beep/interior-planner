@@ -86,6 +86,18 @@
   background: var(--panel-bg);
 }
 
+.snap-category-toggles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.snap-category-toggles .toolbar-toggle {
+  font-size: 12px;
+}
+
 /* --- Body layout --- */
 .app-body {
   flex: 1;

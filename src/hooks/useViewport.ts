@@ -25,12 +25,13 @@ export function useViewport() {
     [zoomAtPoint],
   );
 
+  // 네이티브 DOM 이벤트로 직접 연결해서 쓴다(React의 onWheel prop). 최신 React는 성능을 위해
+  // wheel 리스너를 passive로 등록해 그 안에서 preventDefault()가 씹히므로, 캔버스에 직접
+  // addEventListener({ passive: false })로 붙여야 한다 — 그래서 이벤트 객체 대신 필요한 값만 받는다.
   const onWheel = useCallback(
-    (e: React.WheelEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      const factor = e.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR;
+    (clientX: number, clientY: number, deltaY: number, rect: DOMRect) => {
+      const cursor = { x: clientX - rect.left, y: clientY - rect.top };
+      const factor = deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR;
       zoomAtPoint(cursor, factor);
     },
     [zoomAtPoint],

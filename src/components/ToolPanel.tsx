@@ -36,6 +36,8 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
     setDefaultWallThicknessMm,
     wallLengthSnapMm,
     setWallLengthSnapMm,
+    pathShape,
+    setPathShape,
     displayUnit,
   } = interaction;
 
@@ -96,6 +98,27 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
 
       <div className="side-panel-title">동선</div>
       {renderToolGroup(PATH_TOOLS)}
+
+      {activeTool === 'path' && (
+        <div className="tool-button-list">
+          <button
+            type="button"
+            className={`tool-button${pathShape === 'straight' ? ' is-active' : ''}`}
+            onClick={() => setPathShape('straight')}
+            title="직선으로 그립니다"
+          >
+            직선
+          </button>
+          <button
+            type="button"
+            className={`tool-button${pathShape === 'curve' ? ' is-active' : ''}`}
+            onClick={() => setPathShape('curve')}
+            title="곡선으로 그립니다 (조절점을 드래그해 휘어짐을 조절)"
+          >
+            곡선
+          </button>
+        </div>
+      )}
 
       <div className="side-panel-title">앞으로 추가될 도구</div>
       <div className="side-panel-placeholder">다각형 가구</div>

@@ -58,6 +58,22 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     onSizeChange(size);
   }, [size, onSizeChange]);
 
+  // 휠 확대/축소는 네이티브 리스너로 직접 붙인다 — React의 onWheel prop은 최신 브라우저/React에서
+  // passive로 등록되어 그 안의 preventDefault()가 무시되므로(콘솔 경고 발생), passive:false로
+  // 명시해야 스크롤 대신 확대/축소가 확실히 우선한다.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      onWheel(e.clientX, e.clientY, e.deltaY, canvas.getBoundingClientRect());
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [onWheel]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || size.width === 0 || size.height === 0) return;
@@ -124,7 +140,6 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
         ref={canvasRef}
         className={`plan-canvas plan-canvas--${activeTool}`}
         tabIndex={0}
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

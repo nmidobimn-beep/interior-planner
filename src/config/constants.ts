@@ -106,6 +106,20 @@ export const ARROW_HEAD_LENGTH_MM = 220;
 export const ARROW_HEAD_WIDTH_MM = 160;
 /** 이보다 짧은 동선은 생성하지 않는다 (같은 자리 실수 클릭 방지). */
 export const MIN_PATH_LENGTH_MM = 100;
+/** 곡선 동선을 새로 만들 때 시작-끝 중점에서 수직으로 밀어두는 기본 제어점 오프셋 비율(선 길이 대비) */
+export const DEFAULT_CURVE_OFFSET_RATIO = 0.25;
+/** 곡선 조절점 손잡이의 화면 히트 반지름(px) */
+export const CURVE_CONTROL_HANDLE_RADIUS_PX = 7;
+/** 곡선을 선분들로 근사해 히트테스트/경계를 계산할 때 나눌 구간 수 */
+export const CURVE_SAMPLE_SEGMENTS = 24;
+
+/** --- 스냅 대상 종류 (CAD처럼 개별로 켜고 끌 수 있음) --- */
+export interface SnapCategoryFlags {
+  endpoint: boolean;
+  center: boolean;
+  corner: boolean;
+}
+export const DEFAULT_SNAP_CATEGORIES: SnapCategoryFlags = { endpoint: true, center: true, corner: true };
 
 export const COLORS = {
   background: '#f5f6f8',
@@ -156,4 +170,6 @@ export const COLORS = {
   path: '#9a4fd6',
   pathSelected: '#1d4fc4',
   pathHandle: '#ffffff',
+  pathControlHandle: '#9a4fd6',
+  pathControlLine: 'rgba(154, 79, 214, 0.5)',
 } as const;

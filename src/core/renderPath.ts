@@ -1,27 +1,38 @@
 import type { Point } from '../types/geometry';
 import type { Path } from '../types/path';
-import { COLORS, PATH_ENDPOINT_HANDLE_RADIUS_PX } from '../config/constants';
+import { COLORS, CURVE_CONTROL_HANDLE_RADIUS_PX, PATH_ENDPOINT_HANDLE_RADIUS_PX } from '../config/constants';
 import { worldToScreen, type Viewport } from './viewport';
-import { arrowHeadTriangle } from './pathGeometry';
+import { arrowHeadTriangle, pathEndTangent } from './pathGeometry';
+
+function strokePathShape(ctx: CanvasRenderingContext2D, viewport: Viewport, path: Path) {
+  const start = worldToScreen(viewport, path.start);
+  const end = worldToScreen(viewport, path.end);
+
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  if (path.curve && path.controlPoint) {
+    const control = worldToScreen(viewport, path.controlPoint);
+    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
+  } else {
+    ctx.lineTo(end.x, end.y);
+  }
+  ctx.stroke();
+}
 
 export function drawPaths(ctx: CanvasRenderingContext2D, viewport: Viewport, paths: Path[], selectedId: string | null) {
   for (const path of paths) {
     const isSelected = path.id === selectedId;
-    const start = worldToScreen(viewport, path.start);
-    const end = worldToScreen(viewport, path.end);
     const color = isSelected ? COLORS.pathSelected : COLORS.path;
 
     ctx.strokeStyle = color;
     ctx.lineWidth = isSelected ? 3 : 2;
     ctx.setLineDash([10, 6]);
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
+    strokePathShape(ctx, viewport, path);
     ctx.setLineDash([]);
 
     if (path.showArrow) {
-      const [tip, left, right] = arrowHeadTriangle(path.start, path.end).map((p) => worldToScreen(viewport, p));
+      const { from, to } = pathEndTangent(path);
+      const [tip, left, right] = arrowHeadTriangle(from, to).map((p) => worldToScreen(viewport, p));
       ctx.beginPath();
       ctx.moveTo(tip.x, tip.y);
       ctx.lineTo(left.x, left.y);
@@ -32,6 +43,8 @@ export function drawPaths(ctx: CanvasRenderingContext2D, viewport: Viewport, pat
     }
 
     if (isSelected) {
+      const start = worldToScreen(viewport, path.start);
+      const end = worldToScreen(viewport, path.end);
       for (const point of [start, end]) {
         ctx.beginPath();
         ctx.arc(point.x, point.y, PATH_ENDPOINT_HANDLE_RADIUS_PX, 0, Math.PI * 2);
@@ -41,11 +54,32 @@ export function drawPaths(ctx: CanvasRenderingContext2D, viewport: Viewport, pat
         ctx.fill();
         ctx.stroke();
       }
+
+      if (path.curve && path.controlPoint) {
+        const control = worldToScreen(viewport, path.controlPoint);
+        ctx.strokeStyle = COLORS.pathControlLine;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(control.x, control.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(control.x, control.y, CURVE_CONTROL_HANDLE_RADIUS_PX, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS.pathControlHandle;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+      }
     }
   }
 }
 
-/** 동선을 그리는 중(클릭 한 번 후 두 번째 클릭 전) 임시로 보여주는 구간. */
+/** 동선을 그리는 중(클릭 한 번 후 두 번째 클릭 전) 임시로 보여주는 구간. 직선 미리보기만 지원(곡선은 완성 후 조절). */
 export function drawPathPreview(ctx: CanvasRenderingContext2D, viewport: Viewport, start: Point, end: Point) {
   const s = worldToScreen(viewport, start);
   const e = worldToScreen(viewport, end);

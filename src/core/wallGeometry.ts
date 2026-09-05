@@ -78,16 +78,6 @@ export function hitTestWallEndpoint(point: Point, wall: Wall, toleranceMm: numbe
   return null;
 }
 
-/** 모든 벽의 끝점을 하나의 배열로 모은다 (스냅 후보 계산용). */
-export function collectEndpoints(walls: Wall[], excludeWallId?: string): Point[] {
-  const points: Point[] = [];
-  for (const wall of walls) {
-    if (wall.id === excludeWallId) continue;
-    points.push(wall.start, wall.end);
-  }
-  return points;
-}
-
 export function wallDirectionUnit(wall: Pick<Wall, 'start' | 'end'>): Point {
   const len = wallLengthMm(wall) || 1;
   return { x: (wall.end.x - wall.start.x) / len, y: (wall.end.y - wall.start.y) / len };

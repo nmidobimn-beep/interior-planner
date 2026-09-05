@@ -17,7 +17,7 @@ import {
   type ObjectKind,
   type SelectedObject,
 } from '../state/floorPlanReducer';
-import { REDO, reset, UNDO, type HistoryState } from '../state/history';
+import { commit, REDO, reset, UNDO, type HistoryState } from '../state/history';
 import {
   AUTOSAVE_STORAGE_KEY,
   documentToState,
@@ -99,8 +99,8 @@ export function useFloorPlan() {
     [state.activeLayerId],
   );
 
-  const updateWall = useCallback((id: string, patch: Partial<Omit<Wall, 'id'>>) => {
-    dispatch({ type: 'UPDATE_WALL', id, patch });
+  const updateWall = useCallback((id: string, patch: Partial<Omit<Wall, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_WALL', id, patch, transient });
   }, []);
 
   const deleteWall = useCallback((id: string) => {
@@ -133,8 +133,8 @@ export function useFloorPlan() {
     [state.activeLayerId],
   );
 
-  const updateFurniture = useCallback((id: string, patch: Partial<Omit<Furniture, 'id'>>) => {
-    dispatch({ type: 'UPDATE_FURNITURE', id, patch });
+  const updateFurniture = useCallback((id: string, patch: Partial<Omit<Furniture, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_FURNITURE', id, patch, transient });
   }, []);
 
   const deleteFurniture = useCallback((id: string) => {
@@ -150,8 +150,8 @@ export function useFloorPlan() {
     [state.activeLayerId],
   );
 
-  const updateDoor = useCallback((id: string, patch: Partial<Omit<Door, 'id'>>) => {
-    dispatch({ type: 'UPDATE_DOOR', id, patch });
+  const updateDoor = useCallback((id: string, patch: Partial<Omit<Door, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_DOOR', id, patch, transient });
   }, []);
 
   const deleteDoor = useCallback((id: string) => {
@@ -167,8 +167,8 @@ export function useFloorPlan() {
     [state.activeLayerId],
   );
 
-  const updateWindow = useCallback((id: string, patch: Partial<Omit<WindowOpening, 'id'>>) => {
-    dispatch({ type: 'UPDATE_WINDOW', id, patch });
+  const updateWindow = useCallback((id: string, patch: Partial<Omit<WindowOpening, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_WINDOW', id, patch, transient });
   }, []);
 
   const deleteWindow = useCallback((id: string) => {
@@ -184,8 +184,8 @@ export function useFloorPlan() {
     [state.activeLayerId],
   );
 
-  const updateOutlet = useCallback((id: string, patch: Partial<Omit<Outlet, 'id'>>) => {
-    dispatch({ type: 'UPDATE_OUTLET', id, patch });
+  const updateOutlet = useCallback((id: string, patch: Partial<Omit<Outlet, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_OUTLET', id, patch, transient });
   }, []);
 
   const deleteOutlet = useCallback((id: string) => {
@@ -193,16 +193,16 @@ export function useFloorPlan() {
   }, []);
 
   const addPath = useCallback(
-    (start: Point, end: Point, showArrow = true): Path => {
-      const path: Path = { id: createId(), start, end, showArrow, layerId: state.activeLayerId };
+    (start: Point, end: Point, showArrow = true, curve = false, controlPoint?: Point): Path => {
+      const path: Path = { id: createId(), start, end, curve, controlPoint, showArrow, layerId: state.activeLayerId };
       dispatch({ type: 'ADD_PATH', path });
       return path;
     },
     [state.activeLayerId],
   );
 
-  const updatePath = useCallback((id: string, patch: Partial<Omit<Path, 'id'>>) => {
-    dispatch({ type: 'UPDATE_PATH', id, patch });
+  const updatePath = useCallback((id: string, patch: Partial<Omit<Path, 'id'>>, transient = false) => {
+    dispatch({ type: 'UPDATE_PATH', id, patch, transient });
   }, []);
 
   const deletePath = useCallback((id: string) => {
@@ -334,9 +334,12 @@ export function useFloorPlan() {
         const p = clipboard.data;
         const start = { x: p.start.x + PASTE_OFFSET_MM, y: p.start.y + PASTE_OFFSET_MM };
         const end = { x: p.end.x + PASTE_OFFSET_MM, y: p.end.y + PASTE_OFFSET_MM };
-        const created = addPath(start, end, p.showArrow);
+        const controlPoint = p.controlPoint
+          ? { x: p.controlPoint.x + PASTE_OFFSET_MM, y: p.controlPoint.y + PASTE_OFFSET_MM }
+          : undefined;
+        const created = addPath(start, end, p.showArrow, p.curve, controlPoint);
         if (p.memo) updatePath(created.id, { memo: p.memo });
-        setClipboard({ kind: 'path', data: { ...p, start, end } });
+        setClipboard({ kind: 'path', data: { ...p, start, end, controlPoint } });
         break;
       }
     }
@@ -344,6 +347,27 @@ export function useFloorPlan() {
 
   const undo = useCallback(() => dispatch(UNDO), []);
   const redo = useCallback(() => dispatch(REDO), []);
+
+  // 드래그(이동/회전/리사이즈) 한 제스처를 "시작→끝" 한 건의 History로 묶기 위한 트랜잭션.
+  // 드래그 시작 시 beginTransientEdit로 지금 상태를 캡처해두고, 드래그 도중에는
+  // update*(..., true)로 transient 갱신만 하다가(History에 안 쌓임), 드래그가 끝나면
+  // 실제로 값이 바뀐 경우에만 commitTransientEdit을 호출해 캡처해둔 시작 상태를
+  // History 한 건으로 기록한다. 아무 것도 안 바뀌었으면 discardTransientEdit으로 흘려보낸다.
+  const pendingSnapshotRef = useRef<FloorPlanState | null>(null);
+
+  const beginTransientEdit = useCallback(() => {
+    pendingSnapshotRef.current = state;
+  }, [state]);
+
+  const commitTransientEdit = useCallback(() => {
+    const before = pendingSnapshotRef.current;
+    pendingSnapshotRef.current = null;
+    if (before) dispatch(commit(before));
+  }, []);
+
+  const discardTransientEdit = useCallback(() => {
+    pendingSnapshotRef.current = null;
+  }, []);
 
   const exportDocument = useCallback((): FloorPlanDocument => serializeFloorPlan(state), [state]);
 
@@ -446,6 +470,9 @@ export function useFloorPlan() {
     canRedo: history.future.length > 0,
     undo,
     redo,
+    beginTransientEdit,
+    commitTransientEdit,
+    discardTransientEdit,
     exportDocument,
     loadDocument,
     newDocument,

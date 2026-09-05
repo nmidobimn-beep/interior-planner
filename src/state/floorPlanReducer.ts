@@ -42,22 +42,22 @@ export const initialFloorPlanState: FloorPlanState = {
 
 export type FloorPlanAction =
   | { type: 'ADD_WALL'; wall: Wall }
-  | { type: 'UPDATE_WALL'; id: string; patch: Partial<Omit<Wall, 'id'>> }
+  | { type: 'UPDATE_WALL'; id: string; patch: Partial<Omit<Wall, 'id'>>; transient?: boolean }
   | { type: 'DELETE_WALL'; id: string }
   | { type: 'ADD_FURNITURE'; furniture: Furniture }
-  | { type: 'UPDATE_FURNITURE'; id: string; patch: Partial<Omit<Furniture, 'id'>> }
+  | { type: 'UPDATE_FURNITURE'; id: string; patch: Partial<Omit<Furniture, 'id'>>; transient?: boolean }
   | { type: 'DELETE_FURNITURE'; id: string }
   | { type: 'ADD_DOOR'; door: Door }
-  | { type: 'UPDATE_DOOR'; id: string; patch: Partial<Omit<Door, 'id'>> }
+  | { type: 'UPDATE_DOOR'; id: string; patch: Partial<Omit<Door, 'id'>>; transient?: boolean }
   | { type: 'DELETE_DOOR'; id: string }
   | { type: 'ADD_WINDOW'; window: WindowOpening }
-  | { type: 'UPDATE_WINDOW'; id: string; patch: Partial<Omit<WindowOpening, 'id'>> }
+  | { type: 'UPDATE_WINDOW'; id: string; patch: Partial<Omit<WindowOpening, 'id'>>; transient?: boolean }
   | { type: 'DELETE_WINDOW'; id: string }
   | { type: 'ADD_OUTLET'; outlet: Outlet }
-  | { type: 'UPDATE_OUTLET'; id: string; patch: Partial<Omit<Outlet, 'id'>> }
+  | { type: 'UPDATE_OUTLET'; id: string; patch: Partial<Omit<Outlet, 'id'>>; transient?: boolean }
   | { type: 'DELETE_OUTLET'; id: string }
   | { type: 'ADD_PATH'; path: Path }
-  | { type: 'UPDATE_PATH'; id: string; patch: Partial<Omit<Path, 'id'>> }
+  | { type: 'UPDATE_PATH'; id: string; patch: Partial<Omit<Path, 'id'>>; transient?: boolean }
   | { type: 'DELETE_PATH'; id: string }
   | { type: 'SELECT_OBJECT'; selection: SelectedObject }
   | { type: 'ADD_LAYER'; layer: Layer }
@@ -231,8 +231,12 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
   }
 }
 
-/** SELECT_OBJECT(선택 변경)만 히스토리에서 제외 — 그 외 데이터 변경 액션은 모두 Undo/Redo 대상. */
+/**
+ * SELECT_OBJECT(선택 변경)와 transient:true로 표시된 액션(드래그 도중의 중간 갱신)만
+ * 히스토리에서 제외한다. 드래그가 끝나면 usePlanInteraction이 commit()으로 "시작→끝"을
+ * 한 건만 기록하므로, 그 외 데이터 변경 액션은 모두 그대로 Undo/Redo 대상이다.
+ */
 export const historyFloorPlanReducer = createHistoryReducer<FloorPlanState, FloorPlanAction>(
   floorPlanReducer,
-  (action) => action.type !== 'SELECT_OBJECT',
+  (action) => action.type !== 'SELECT_OBJECT' && !('transient' in action && action.transient),
 );

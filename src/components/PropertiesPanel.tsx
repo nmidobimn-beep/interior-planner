@@ -9,6 +9,7 @@ import {
   MIN_WALL_THICKNESS_MM,
 } from '../config/constants';
 import { clampOpeningOffset } from '../core/openingGeometry';
+import { defaultControlPoint } from '../core/pathGeometry';
 import { endPointForLength, wallLengthMm } from '../core/wallGeometry';
 import type { HingeSide, SwingDirection } from '../types/opening';
 import type { Layer } from '../types/layer';
@@ -397,6 +398,22 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
     return (
       <>
         <div className="side-panel-title">동선 속성</div>
+
+        <label className="field-row">
+          <span>곡선으로 표시</span>
+          <input
+            type="checkbox"
+            checked={selectedPath.curve}
+            onChange={(e) => {
+              const curve = e.target.checked;
+              if (curve && !selectedPath.controlPoint) {
+                updatePath(selectedPath.id, { curve, controlPoint: defaultControlPoint(selectedPath.start, selectedPath.end) });
+              } else {
+                updatePath(selectedPath.id, { curve });
+              }
+            }}
+          />
+        </label>
 
         <label className="field-row">
           <span>화살표 표시</span>
