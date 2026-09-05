@@ -22,7 +22,7 @@ function formatTimestamp(date: Date): string {
 /** 상단 툴바. 새로 만들기/저장/불러오기, 실행취소/다시실행/복사/붙여넣기, 확대/축소/전체보기, 스냅 on/off를 담당한다. */
 export function Toolbar({ viewportApi, interaction, floorPlan, canvasSize, fitBounds, showDemo, onToggleDemo }: ToolbarProps) {
   const { viewport, zoomIn, zoomOut, fitToView } = viewportApi;
-  const { snapEnabled, setSnapEnabled } = interaction;
+  const { snapEnabled, setSnapEnabled, displayUnit, cycleDisplayUnit } = interaction;
   const { canUndo, canRedo, undo, redo, canCopy, canPaste, copySelected, pasteClipboard, exportDocument, loadDocument, newDocument } =
     floorPlan;
   const zoomPercent = Math.round(viewport.scale * 100);
@@ -117,6 +117,10 @@ export function Toolbar({ viewportApi, interaction, floorPlan, canvasSize, fitBo
       </div>
 
       <div className="toolbar-toggles">
+        <button type="button" className="toolbar-unit-button" onClick={cycleDisplayUnit} title="표시 단위 전환 (mm → cm → m)">
+          단위: {displayUnit}
+        </button>
+
         <label className="toolbar-toggle">
           <input type="checkbox" checked={snapEnabled} onChange={(e) => setSnapEnabled(e.target.checked)} />
           스냅

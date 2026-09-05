@@ -14,9 +14,12 @@ import type { HingeSide, SwingDirection } from '../types/opening';
 import type { Layer } from '../types/layer';
 import type { ObjectKind } from '../state/floorPlanReducer';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
+import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
+import { LengthInput } from './LengthInput';
 
 interface PropertiesPanelProps {
   floorPlan: UseFloorPlanResult;
+  interaction: UsePlanInteractionResult;
 }
 
 interface LayerFieldProps {
@@ -43,8 +46,8 @@ function LayerField({ kind, objectId, layerId, layers, moveObjectToLayer }: Laye
   );
 }
 
-/** 오른쪽 속성 패널 — 선택된 벽 또는 가구의 속성을 편집하고 삭제할 수 있다. */
-export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
+/** 오른쪽 속성 패널 — 선택된 객체의 속성을 편집하고 삭제할 수 있다. 길이값은 모두 현재 표시 단위(mm/cm/m)로 보여준다. */
+export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps) {
   const {
     walls,
     layers,
@@ -63,6 +66,7 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
     moveObjectToLayer,
     deleteSelected,
   } = floorPlan;
+  const { displayUnit: unit } = interaction;
 
   if (selectedWall) {
     const lengthMm = Math.round(wallLengthMm(selectedWall));
@@ -71,34 +75,26 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
         <div className="side-panel-title">벽 속성</div>
 
         <div className="field-row">
-          <label htmlFor="wall-length">길이 (mm)</label>
-          <input
+          <label htmlFor="wall-length">길이 ({unit})</label>
+          <LengthInput
             id="wall-length"
-            type="number"
-            min={MIN_WALL_LENGTH_MM}
-            value={lengthMm}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              if (!Number.isFinite(value) || value < MIN_WALL_LENGTH_MM) return;
-              updateWall(selectedWall.id, { end: endPointForLength(selectedWall, value) });
-            }}
+            valueMm={lengthMm}
+            unit={unit}
+            minMm={MIN_WALL_LENGTH_MM}
+            maxMm={Number.MAX_SAFE_INTEGER}
+            onChangeMm={(mm) => updateWall(selectedWall.id, { end: endPointForLength(selectedWall, mm) })}
           />
         </div>
 
         <div className="field-row">
-          <label htmlFor="wall-thickness">두께 (mm)</label>
-          <input
+          <label htmlFor="wall-thickness">두께 ({unit})</label>
+          <LengthInput
             id="wall-thickness"
-            type="number"
-            min={MIN_WALL_THICKNESS_MM}
-            max={MAX_WALL_THICKNESS_MM}
-            value={selectedWall.thicknessMm}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              if (!Number.isFinite(value)) return;
-              const clamped = Math.min(MAX_WALL_THICKNESS_MM, Math.max(MIN_WALL_THICKNESS_MM, value));
-              updateWall(selectedWall.id, { thicknessMm: clamped });
-            }}
+            valueMm={selectedWall.thicknessMm}
+            unit={unit}
+            minMm={MIN_WALL_THICKNESS_MM}
+            maxMm={MAX_WALL_THICKNESS_MM}
+            onChangeMm={(mm) => updateWall(selectedWall.id, { thicknessMm: mm })}
           />
         </div>
 
@@ -113,7 +109,6 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
 
   if (selectedFurniture) {
     const item = selectedFurniture;
-    const clampSize = (value: number) => Math.min(MAX_FURNITURE_SIZE_MM, Math.max(MIN_FURNITURE_SIZE_MM, value));
 
     return (
       <>
@@ -131,51 +126,38 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
 
         {item.shape === 'circle' ? (
           <div className="field-row">
-            <label htmlFor="furniture-diameter">지름 (mm)</label>
-            <input
+            <label htmlFor="furniture-diameter">지름 ({unit})</label>
+            <LengthInput
               id="furniture-diameter"
-              type="number"
-              min={MIN_FURNITURE_SIZE_MM}
-              max={MAX_FURNITURE_SIZE_MM}
-              value={item.width}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                if (!Number.isFinite(value)) return;
-                const clamped = clampSize(value);
-                updateFurniture(item.id, { width: clamped, height: clamped });
-              }}
+              valueMm={item.width}
+              unit={unit}
+              minMm={MIN_FURNITURE_SIZE_MM}
+              maxMm={MAX_FURNITURE_SIZE_MM}
+              onChangeMm={(mm) => updateFurniture(item.id, { width: mm, height: mm })}
             />
           </div>
         ) : (
           <>
             <div className="field-row">
-              <label htmlFor="furniture-width">가로 (mm)</label>
-              <input
+              <label htmlFor="furniture-width">가로 ({unit})</label>
+              <LengthInput
                 id="furniture-width"
-                type="number"
-                min={MIN_FURNITURE_SIZE_MM}
-                max={MAX_FURNITURE_SIZE_MM}
-                value={item.width}
-                onChange={(e) => {
-                  const value = Number(e.target.value);
-                  if (!Number.isFinite(value)) return;
-                  updateFurniture(item.id, { width: clampSize(value) });
-                }}
+                valueMm={item.width}
+                unit={unit}
+                minMm={MIN_FURNITURE_SIZE_MM}
+                maxMm={MAX_FURNITURE_SIZE_MM}
+                onChangeMm={(mm) => updateFurniture(item.id, { width: mm })}
               />
             </div>
             <div className="field-row">
-              <label htmlFor="furniture-height">세로 (mm)</label>
-              <input
+              <label htmlFor="furniture-height">세로 ({unit})</label>
+              <LengthInput
                 id="furniture-height"
-                type="number"
-                min={MIN_FURNITURE_SIZE_MM}
-                max={MAX_FURNITURE_SIZE_MM}
-                value={item.height}
-                onChange={(e) => {
-                  const value = Number(e.target.value);
-                  if (!Number.isFinite(value)) return;
-                  updateFurniture(item.id, { height: clampSize(value) });
-                }}
+                valueMm={item.height}
+                unit={unit}
+                minMm={MIN_FURNITURE_SIZE_MM}
+                maxMm={MAX_FURNITURE_SIZE_MM}
+                onChangeMm={(mm) => updateFurniture(item.id, { height: mm })}
               />
             </div>
           </>
@@ -183,18 +165,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
 
         {item.shape === 'lshape' && (
           <div className="field-row">
-            <label htmlFor="furniture-arm">팔 두께 (mm)</label>
-            <input
+            <label htmlFor="furniture-arm">팔 두께 ({unit})</label>
+            <LengthInput
               id="furniture-arm"
-              type="number"
-              min={MIN_FURNITURE_SIZE_MM}
-              max={Math.min(item.width, item.height)}
-              value={item.armThicknessMm}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                if (!Number.isFinite(value)) return;
-                updateFurniture(item.id, { armThicknessMm: clampSize(value) });
-              }}
+              valueMm={item.armThicknessMm ?? MIN_FURNITURE_SIZE_MM}
+              unit={unit}
+              minMm={MIN_FURNITURE_SIZE_MM}
+              maxMm={Math.min(item.width, item.height)}
+              onChangeMm={(mm) => updateFurniture(item.id, { armThicknessMm: mm })}
             />
           </div>
         )}
@@ -252,9 +230,9 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
     const wall = walls.find((w) => w.id === selectedDoor.wallId);
     const wallLength = wall ? wallLengthMm(wall) : MAX_WALL_THICKNESS_MM * 10;
 
-    const changeWidth = (value: number) => {
-      if (!wall || !Number.isFinite(value)) return;
-      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, value));
+    const changeWidth = (newWidthRaw: number) => {
+      if (!wall) return;
+      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, newWidthRaw));
       const centerOffset = selectedDoor.offsetMm + selectedDoor.widthMm / 2;
       const newOffset = clampOpeningOffset(centerOffset - newWidth / 2, newWidth, wallLength);
       updateDoor(selectedDoor.id, { widthMm: newWidth, offsetMm: newOffset });
@@ -265,14 +243,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
         <div className="side-panel-title">문 속성</div>
 
         <div className="field-row">
-          <label htmlFor="door-width">폭 (mm)</label>
-          <input
+          <label htmlFor="door-width">폭 ({unit})</label>
+          <LengthInput
             id="door-width"
-            type="number"
-            min={MIN_OPENING_WIDTH_MM}
-            max={wallLength}
-            value={Math.round(selectedDoor.widthMm)}
-            onChange={(e) => changeWidth(Number(e.target.value))}
+            valueMm={selectedDoor.widthMm}
+            unit={unit}
+            minMm={MIN_OPENING_WIDTH_MM}
+            maxMm={wallLength}
+            onChangeMm={changeWidth}
           />
         </div>
 
@@ -319,9 +297,9 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
     const wall = walls.find((w) => w.id === selectedWindow.wallId);
     const wallLength = wall ? wallLengthMm(wall) : MAX_WALL_THICKNESS_MM * 10;
 
-    const changeWidth = (value: number) => {
-      if (!wall || !Number.isFinite(value)) return;
-      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, value));
+    const changeWidth = (newWidthRaw: number) => {
+      if (!wall) return;
+      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, newWidthRaw));
       const centerOffset = selectedWindow.offsetMm + selectedWindow.widthMm / 2;
       const newOffset = clampOpeningOffset(centerOffset - newWidth / 2, newWidth, wallLength);
       updateWindow(selectedWindow.id, { widthMm: newWidth, offsetMm: newOffset });
@@ -332,14 +310,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
         <div className="side-panel-title">창문 속성</div>
 
         <div className="field-row">
-          <label htmlFor="window-width">폭 (mm)</label>
-          <input
+          <label htmlFor="window-width">폭 ({unit})</label>
+          <LengthInput
             id="window-width"
-            type="number"
-            min={MIN_OPENING_WIDTH_MM}
-            max={wallLength}
-            value={Math.round(selectedWindow.widthMm)}
-            onChange={(e) => changeWidth(Number(e.target.value))}
+            valueMm={selectedWindow.widthMm}
+            unit={unit}
+            minMm={MIN_OPENING_WIDTH_MM}
+            maxMm={wallLength}
+            onChangeMm={changeWidth}
           />
         </div>
 

@@ -42,6 +42,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
   const {
     activeTool,
     defaultWallThicknessMm,
+    displayUnit,
     chainStart,
     previewPoint,
     previewSnapKind,
@@ -86,13 +87,13 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
 
     if (chainStart && previewPoint) {
       if (activeTool === 'path') drawPathPreview(ctx, viewport, chainStart, previewPoint);
-      else drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm);
+      else drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm, displayUnit);
     }
     if (previewPoint) {
       drawSnapIndicator(ctx, viewport, previewPoint, previewSnapKind);
     }
 
-    drawRulers(ctx, viewport, size);
+    drawRulers(ctx, viewport, size, displayUnit);
   }, [
     viewport,
     size,
@@ -114,6 +115,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     previewPoint,
     previewSnapKind,
     defaultWallThicknessMm,
+    displayUnit,
   ]);
 
   return (

@@ -2,21 +2,14 @@ import type { Size } from '../types/geometry';
 import { COLORS, RULER_THICKNESS_PX } from '../config/constants';
 import { screenToWorld, type Viewport } from './viewport';
 import { pickGridStepMm } from './grid';
-
-/** mm 값을 눈금자 라벨로 표시한다 (1000mm 이상이면 m 단위로 축약). */
-function formatTickLabel(mm: number): string {
-  if (Math.abs(mm) >= 1000) {
-    const meters = mm / 1000;
-    return `${Number(meters.toFixed(2))}m`;
-  }
-  return `${Math.round(mm)}`;
-}
+import { formatLengthMm, type DisplayUnit } from './units';
 
 /**
- * 캔버스 상단·좌측에 mm 눈금자를 그린다.
+ * 캔버스 상단·좌측에 눈금자를 그린다. 실제 격자 간격(mm)은 항상 그대로이며,
+ * 라벨에 표시되는 단위(mm/cm/m)만 unit에 따라 바뀐다.
  * 격자와 같은 간격(pickGridStepMm)을 사용해 격자선과 눈금이 항상 일치한다.
  */
-export function drawRulers(ctx: CanvasRenderingContext2D, viewport: Viewport, canvasSize: Size) {
+export function drawRulers(ctx: CanvasRenderingContext2D, viewport: Viewport, canvasSize: Size, unit: DisplayUnit) {
   const step = pickGridStepMm(viewport.scale);
   const topLeft = screenToWorld(viewport, { x: 0, y: 0 });
   const bottomRight = screenToWorld(viewport, { x: canvasSize.width, y: canvasSize.height });
@@ -49,7 +42,7 @@ export function drawRulers(ctx: CanvasRenderingContext2D, viewport: Viewport, ca
     ctx.moveTo(Math.round(screenX) + 0.5, RULER_THICKNESS_PX - 6);
     ctx.lineTo(Math.round(screenX) + 0.5, RULER_THICKNESS_PX);
     ctx.stroke();
-    ctx.fillText(formatTickLabel(worldX), screenX + 3, RULER_THICKNESS_PX - 8);
+    ctx.fillText(formatLengthMm(worldX, unit), screenX + 3, RULER_THICKNESS_PX - 8);
   }
 
   const startY = Math.floor(topLeft.y / step) * step;
@@ -64,7 +57,7 @@ export function drawRulers(ctx: CanvasRenderingContext2D, viewport: Viewport, ca
     ctx.translate(RULER_THICKNESS_PX - 8, screenY - 3);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = 'right';
-    ctx.fillText(formatTickLabel(worldY), 0, 0);
+    ctx.fillText(formatLengthMm(worldY, unit), 0, 0);
     ctx.restore();
   }
 

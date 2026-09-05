@@ -4,6 +4,7 @@ import { COLORS, WALL_ENDPOINT_HANDLE_RADIUS_PX } from '../config/constants';
 import { worldToScreen, type Viewport } from './viewport';
 import { wallCorners, wallLengthMm } from './wallGeometry';
 import type { SnapKind } from './snap';
+import { formatLengthMm, type DisplayUnit } from './units';
 
 function toScreenPath(ctx: CanvasRenderingContext2D, viewport: Viewport, corners: Point[]) {
   ctx.beginPath();
@@ -43,12 +44,6 @@ function drawEndpointHandles(ctx: CanvasRenderingContext2D, viewport: Viewport, 
   }
 }
 
-/** mm 값을 "1234mm" 또는 "1.23m" 형태의 사람이 읽기 좋은 라벨로 바꾼다. */
-function formatLengthLabel(mm: number): string {
-  if (mm >= 1000) return `${(mm / 1000).toFixed(2)}m`;
-  return `${Math.round(mm)}mm`;
-}
-
 /** 벽 그리기 중인 구간(rubber-band)과 실시간 길이 라벨을 그린다. */
 export function drawWallPreview(
   ctx: CanvasRenderingContext2D,
@@ -56,6 +51,7 @@ export function drawWallPreview(
   start: Point,
   end: Point,
   thicknessMm: number,
+  unit: DisplayUnit,
 ) {
   toScreenPath(ctx, viewport, wallCorners({ start, end, thicknessMm }));
   ctx.fillStyle = COLORS.wallPreview;
@@ -67,7 +63,7 @@ export function drawWallPreview(
   ctx.setLineDash([]);
 
   const mid = worldToScreen(viewport, { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 });
-  const label = formatLengthLabel(wallLengthMm({ start, end }));
+  const label = formatLengthMm(wallLengthMm({ start, end }), unit);
   ctx.font = '12px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = COLORS.wallLengthLabel;
   ctx.textAlign = 'center';

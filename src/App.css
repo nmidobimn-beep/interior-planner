@@ -71,6 +71,21 @@
   white-space: nowrap;
 }
 
+.toolbar-unit-button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toolbar-unit-button:hover {
+  background: var(--panel-bg);
+}
+
 /* --- Body layout --- */
 .app-body {
   flex: 1;

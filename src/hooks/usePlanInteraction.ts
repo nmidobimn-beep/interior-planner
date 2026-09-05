@@ -8,6 +8,7 @@ import {
   DEFAULT_DOOR_WIDTH_MM,
   DEFAULT_FURNITURE_SIZE,
   DEFAULT_OUTLET_COUNT,
+  DEFAULT_WALL_LENGTH_SNAP_MM,
   DEFAULT_WALL_THICKNESS_MM,
   DEFAULT_WINDOW_WIDTH_MM,
   FURNITURE_HANDLE_RADIUS_PX,
@@ -21,6 +22,7 @@ import {
 } from '../config/constants';
 import { screenToWorld, worldToScreen, type Viewport } from '../core/viewport';
 import { snapAngleDeg, snapPoint, type SnapKind } from '../core/snap';
+import { nextDisplayUnit, type DisplayUnit } from '../core/units';
 import {
   collectEndpoints,
   distance,
@@ -59,6 +61,18 @@ interface UsePlanInteractionArgs {
 
 const isFurnitureTool = (tool: ToolId): tool is FurnitureShape =>
   tool === 'rectangle' || tool === 'circle' || tool === 'lshape';
+
+/** origin 기준 point의 각도는 그대로 두고, 거리만 unitMm의 배수로 반올림한다. */
+function snapLengthAlong(origin: Point, point: Point, unitMm: number): Point {
+  const dx = point.x - origin.x;
+  const dy = point.y - origin.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist === 0) return point;
+
+  const snappedDist = Math.round(dist / unitMm) * unitMm;
+  const scale = snappedDist / dist;
+  return { x: origin.x + dx * scale, y: origin.y + dy * scale };
+}
 
 /**
  * 캔버스 위 마우스/키보드 조작을 총괄하는 훅.
@@ -105,7 +119,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
   const [activeTool, setActiveToolState] = useState<ToolId>('select');
   const [defaultWallThicknessMm, setDefaultWallThicknessMm] = useState(DEFAULT_WALL_THICKNESS_MM);
+  const [wallLengthSnapMm, setWallLengthSnapMm] = useState(DEFAULT_WALL_LENGTH_SNAP_MM);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [displayUnit, setDisplayUnit] = useState<DisplayUnit>('mm');
+  const cycleDisplayUnit = useCallback(() => setDisplayUnit((unit) => nextDisplayUnit(unit)), []);
 
   const [cursorWorld, setCursorWorld] = useState<Point | null>(null);
   const [chainStart, setChainStart] = useState<Point | null>(null);
@@ -155,9 +172,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
             scale: viewport.scale,
             enabled: snapEnabled,
           });
-          if (distance(chainStart, snapped.point) >= MIN_WALL_LENGTH_MM) {
-            addWall(chainStart, snapped.point, defaultWallThicknessMm);
-            setChainStart(snapped.point);
+          // 다른 벽 끝점에 붙는 경우(우선순위 1위)가 아닐 때만 길이를 설정 단위로 반올림한다 —
+          // 안 그러면 정확히 이어붙인 지점이 다시 어긋나 버린다.
+          const finalPoint =
+            snapEnabled && snapped.kind !== 'endpoint' ? snapLengthAlong(chainStart, snapped.point, wallLengthSnapMm) : snapped.point;
+          if (distance(chainStart, finalPoint) >= MIN_WALL_LENGTH_MM) {
+            addWall(chainStart, finalPoint, defaultWallThicknessMm);
+            setChainStart(finalPoint);
           }
         }
         return;
@@ -350,6 +371,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       snapEnabled,
       viewport,
       walls,
+      wallLengthSnapMm,
       windows,
     ],
   );
@@ -476,7 +498,11 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           scale: viewport.scale,
           enabled: snapEnabled,
         });
-        setPreviewPoint(snapped.point);
+        const finalPoint =
+          activeTool === 'wall' && snapEnabled && snapped.kind !== 'endpoint'
+            ? snapLengthAlong(chainStart, snapped.point, wallLengthSnapMm)
+            : snapped.point;
+        setPreviewPoint(finalPoint);
         setPreviewSnapKind(snapped.kind);
       }
     },
@@ -497,6 +523,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       updateWindow,
       viewport,
       walls,
+      wallLengthSnapMm,
       windows,
     ],
   );
@@ -568,8 +595,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     setActiveTool,
     defaultWallThicknessMm,
     setDefaultWallThicknessMm,
+    wallLengthSnapMm,
+    setWallLengthSnapMm,
     snapEnabled,
     setSnapEnabled,
+    displayUnit,
+    setDisplayUnit,
+    cycleDisplayUnit,
     cursorWorld,
     chainStart,
     previewPoint,

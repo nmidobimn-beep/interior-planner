@@ -53,6 +53,15 @@ export const SNAP_GRID_MM = 50;
 /** 이보다 짧은 벽은 생성하지 않는다 (같은 자리 실수 클릭 방지). */
 export const MIN_WALL_LENGTH_MM = 50;
 
+/**
+ * 벽을 그릴 때(체인 드로잉) 길이를 이 단위의 배수로 딱 떨어지게 스냅한다.
+ * 각도(자유/45도 스냅 등)는 그대로 두고 거리만 반올림 — 다른 벽 끝점에 붙는 스냅이
+ * 최우선이며, 그 경우가 아닐 때만 적용된다. 사용자가 100mm~1000mm(1m) 사이에서 설정 가능.
+ */
+export const MIN_WALL_LENGTH_SNAP_MM = 100;
+export const MAX_WALL_LENGTH_SNAP_MM = 1000;
+export const DEFAULT_WALL_LENGTH_SNAP_MM = 100;
+
 /** --- 가구 기본값 --- */
 export const MIN_FURNITURE_SIZE_MM = 50;
 export const MAX_FURNITURE_SIZE_MM = 10000;

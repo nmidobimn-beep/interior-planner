@@ -58,12 +58,12 @@ function App() {
         </main>
 
         <aside className="side-panel side-panel-right">
-          <PropertiesPanel floorPlan={floorPlan} />
+          <PropertiesPanel floorPlan={floorPlan} interaction={interaction} />
           <LayerPanel floorPlan={floorPlan} />
         </aside>
       </div>
 
-      <StatusBar viewport={viewportApi.viewport} cursorWorld={interaction.cursorWorld} />
+      <StatusBar viewport={viewportApi.viewport} cursorWorld={interaction.cursorWorld} unit={interaction.displayUnit} />
     </div>
   );
 }
