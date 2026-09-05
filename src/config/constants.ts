@@ -138,12 +138,6 @@ export const COLORS = {
   rulerBorder: '#d6d9e0',
   rulerText: '#5b6270',
 
-  demoRoomStroke: '#8a8f9c',
-  demoRoomFill: 'rgba(138, 143, 156, 0.06)',
-  demoFurnitureStroke: '#2f6fed',
-  demoFurnitureFill: 'rgba(47, 111, 237, 0.12)',
-  demoFurnitureText: '#1f2937',
-
   wallFill: '#5b6270',
   wallStroke: '#3d4149',
   wallSelectedFill: '#2f6fed',
