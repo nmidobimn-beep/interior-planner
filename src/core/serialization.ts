@@ -5,6 +5,7 @@ import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
 import type { Polygon } from '../types/polygon';
+import type { DimensionLine } from '../types/dimension';
 import type { Layer } from '../types/layer';
 import type { FloorPlanState } from '../state/floorPlanReducer';
 
@@ -22,6 +23,7 @@ export interface FloorPlanDocument {
   paths: Path[];
   labels: TextLabel[];
   polygons: Polygon[];
+  dimensions: DimensionLine[];
   layers: Layer[];
   activeLayerId: string;
 }
@@ -38,6 +40,7 @@ export function serializeFloorPlan(state: FloorPlanState): FloorPlanDocument {
     paths: state.paths,
     labels: state.labels,
     polygons: state.polygons,
+    dimensions: state.dimensions,
     layers: state.layers,
     activeLayerId: state.activeLayerId,
   };
@@ -62,6 +65,7 @@ export function parseFloorPlanDocument(input: unknown): FloorPlanDocument | null
   // labels/polygons는 이 기능이 없던 옛 파일에는 없을 수 있으므로 없으면 빈 배열로 취급한다(하위 호환).
   if (doc.labels !== undefined && !isArray(doc.labels)) return null;
   if (doc.polygons !== undefined && !isArray(doc.polygons)) return null;
+  if (doc.dimensions !== undefined && !isArray(doc.dimensions)) return null;
 
   const layers = doc.layers as Layer[];
   const layerIds = new Set(layers.map((l) => l.id));
@@ -82,6 +86,7 @@ export function parseFloorPlanDocument(input: unknown): FloorPlanDocument | null
     paths: normalizeLayerId(doc.paths as Path[]),
     labels: normalizeLayerId((doc.labels as TextLabel[]) ?? []),
     polygons: normalizeLayerId((doc.polygons as Polygon[]) ?? []),
+    dimensions: normalizeLayerId((doc.dimensions as DimensionLine[]) ?? []),
     layers,
     activeLayerId,
   };
@@ -97,6 +102,7 @@ export function documentToState(doc: FloorPlanDocument): FloorPlanState {
     paths: doc.paths,
     labels: doc.labels ?? [],
     polygons: doc.polygons ?? [],
+    dimensions: doc.dimensions ?? [],
     layers: doc.layers,
     activeLayerId: doc.activeLayerId,
     selection: [],

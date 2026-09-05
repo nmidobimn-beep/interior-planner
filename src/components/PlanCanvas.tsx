@@ -9,6 +9,7 @@ import { drawDoors, drawOutlets, drawWindows } from '../core/renderOpenings';
 import { drawPathPreview, drawPaths } from '../core/renderPath';
 import { drawLabels } from '../core/renderLabel';
 import { drawPolygonPreview, drawPolygons } from '../core/renderPolygon';
+import { drawDimensionPreview, drawDimensions } from '../core/renderDimension';
 import { polygonBounds } from '../core/polygonGeometry';
 import { computeSelectionBounds } from '../core/multiSelectGeometry';
 import { drawSelectionBounds, drawSelectionMarquee } from '../core/renderSelection';
@@ -39,6 +40,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     visiblePaths: paths,
     visibleLabels: labels,
     visiblePolygons: polygons,
+    visibleDimensions: dimensions,
     selectedWall,
     selectedFurniture,
     selectedDoor,
@@ -54,11 +56,13 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     selectedPathIds,
     selectedLabelIds,
     selectedPolygonIds,
+    selectedDimensionIds,
   } = floorPlan;
   const {
     activeTool,
     defaultWallThicknessMm,
     displayUnit,
+    dimensionMode,
     chainStart,
     previewPoint,
     previewSnapKind,
@@ -121,10 +125,11 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     drawPaths(ctx, viewport, paths, selectedPathIds);
     drawLabels(ctx, viewport, labels, selectedLabelIds);
     drawPolygons(ctx, viewport, polygons, selectedPolygonIds);
+    drawDimensions(ctx, viewport, dimensions, selectedDimensionIds, displayUnit);
 
     // 다중 선택(2개 이상)일 때는 개별 손잡이 대신 전체를 감싸는 바운딩 박스 + 그룹 회전 손잡이를 보여준다.
     if (selectionCount > 1) {
-      const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels, polygons });
+      const bounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels, polygons, dimensions });
       if (bounds) drawSelectionBounds(ctx, viewport, bounds);
     } else if (selectedPolygon) {
       // 다각형 하나만 선택된 경우도 같은 방식(바운딩 박스 + 회전 손잡이)으로 회전할 수 있게 해준다.
@@ -133,6 +138,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
 
     if (chainStart && previewPoint) {
       if (activeTool === 'path') drawPathPreview(ctx, viewport, chainStart, previewPoint);
+      else if (activeTool === 'dimension') drawDimensionPreview(ctx, viewport, chainStart, previewPoint, dimensionMode, displayUnit);
       else drawWallPreview(ctx, viewport, chainStart, previewPoint, defaultWallThicknessMm, displayUnit);
     }
     if (previewPoint) {
@@ -160,6 +166,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     paths,
     labels,
     polygons,
+    dimensions,
     selectedWall,
     selectedFurniture,
     selectedDoor,
@@ -175,6 +182,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     selectedPathIds,
     selectedLabelIds,
     selectedPolygonIds,
+    selectedDimensionIds,
     activeTool,
     chainStart,
     previewPoint,
@@ -183,6 +191,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     polygonDraft,
     cursorWorld,
     defaultWallThicknessMm,
+    dimensionMode,
     displayUnit,
   ]);
 

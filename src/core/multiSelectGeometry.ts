@@ -4,6 +4,7 @@ import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
 import type { Polygon } from '../types/polygon';
+import type { DimensionLine } from '../types/dimension';
 import type { ObjectKind, SelectionItem } from '../state/floorPlanReducer';
 import { furnitureBounds } from './furnitureGeometry';
 import { polygonBounds } from './polygonGeometry';
@@ -12,9 +13,16 @@ import { polygonBounds } from './polygonGeometry';
  * 다중 선택 기능이 지금 단계에서 다루는 객체 종류. 벽/문/창문 같은 구조 객체는
  * (요청에서 언급된 대로) 기존 단일 선택 구조를 그대로 유지하고 이번엔 포함하지 않는다.
  */
-export type MultiSelectableKind = 'furniture' | 'outlet' | 'path' | 'label' | 'polygon';
+export type MultiSelectableKind = 'furniture' | 'outlet' | 'path' | 'label' | 'polygon' | 'dimension';
 
-export const MULTI_SELECTABLE_KINDS: ReadonlySet<ObjectKind> = new Set<ObjectKind>(['furniture', 'outlet', 'path', 'label', 'polygon']);
+export const MULTI_SELECTABLE_KINDS: ReadonlySet<ObjectKind> = new Set<ObjectKind>([
+  'furniture',
+  'outlet',
+  'path',
+  'label',
+  'polygon',
+  'dimension',
+]);
 
 export function isMultiSelectable(kind: ObjectKind): kind is MultiSelectableKind {
   return MULTI_SELECTABLE_KINDS.has(kind);
@@ -26,6 +34,7 @@ interface SelectableData {
   paths: Path[];
   labels: TextLabel[];
   polygons: Polygon[];
+  dimensions: DimensionLine[];
 }
 
 function pointBounds(p: Point): Bounds {
@@ -40,6 +49,10 @@ function pathBounds(path: Path): Bounds {
   let b = mergeBounds(pointBounds(path.start), pointBounds(path.end));
   if (path.controlPoint) b = mergeBounds(b, pointBounds(path.controlPoint));
   return b;
+}
+
+function dimensionBounds(dim: DimensionLine): Bounds {
+  return mergeBounds(pointBounds(dim.start), pointBounds(dim.end));
 }
 
 /** 어떤 종류든 객체 하나의 world 기준 경계 상자. 찾지 못하면 null. */
@@ -64,6 +77,10 @@ export function boundsForItem(item: SelectionItem, data: SelectableData): Bounds
     case 'polygon': {
       const p = data.polygons.find((x) => x.id === item.id);
       return p ? polygonBounds(p) : null;
+    }
+    case 'dimension': {
+      const d = data.dimensions.find((x) => x.id === item.id);
+      return d ? dimensionBounds(d) : null;
     }
     default:
       return null;
@@ -137,6 +154,7 @@ export function hitTestBoxSelection(start: Point, end: Point, data: SelectableDa
   for (const l of data.labels) if (test(pointBounds(l), rect)) result.push({ kind: 'label', id: l.id });
   for (const p of data.paths) if (test(pathBounds(p), rect)) result.push({ kind: 'path', id: p.id });
   for (const poly of data.polygons) if (test(polygonBounds(poly), rect)) result.push({ kind: 'polygon', id: poly.id });
+  for (const dim of data.dimensions) if (test(dimensionBounds(dim), rect)) result.push({ kind: 'dimension', id: dim.id });
 
   return result;
 }

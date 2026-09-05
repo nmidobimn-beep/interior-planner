@@ -6,9 +6,10 @@ import type { Layer } from '../types/layer';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
 import type { Polygon } from '../types/polygon';
+import type { DimensionLine } from '../types/dimension';
 import { createHistoryReducer } from './history';
 
-export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label' | 'polygon';
+export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label' | 'polygon' | 'dimension';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
 /** 다중 선택 목록의 항목 하나. null을 허용하지 않는 SelectedObject라고 보면 된다. */
 export type SelectionItem = { kind: ObjectKind; id: string };
@@ -34,6 +35,7 @@ export interface FloorPlanState {
   paths: Path[];
   labels: TextLabel[];
   polygons: Polygon[];
+  dimensions: DimensionLine[];
   layers: Layer[];
   activeLayerId: string;
   selection: SelectionItem[];
@@ -48,6 +50,7 @@ export const initialFloorPlanState: FloorPlanState = {
   paths: [],
   labels: [],
   polygons: [],
+  dimensions: [],
   layers: [{ id: DEFAULT_LAYER_ID, name: '레이어 1', visible: true }],
   activeLayerId: DEFAULT_LAYER_ID,
   selection: [],
@@ -78,6 +81,9 @@ export type FloorPlanAction =
   | { type: 'ADD_POLYGON'; polygon: Polygon }
   | { type: 'UPDATE_POLYGON'; id: string; patch: Partial<Omit<Polygon, 'id'>>; transient?: boolean }
   | { type: 'DELETE_POLYGON'; id: string }
+  | { type: 'ADD_DIMENSION'; dimension: DimensionLine }
+  | { type: 'UPDATE_DIMENSION'; id: string; patch: Partial<Omit<DimensionLine, 'id'>>; transient?: boolean }
+  | { type: 'DELETE_DIMENSION'; id: string }
   | { type: 'DELETE_MANY'; items: SelectionItem[] }
   | { type: 'SELECT_OBJECT'; selection: SelectedObject }
   | { type: 'TOGGLE_SELECT_OBJECT'; item: SelectionItem }
@@ -222,6 +228,22 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         selection: removeFromSelection(state.selection, 'polygon', action.id),
       };
 
+    case 'ADD_DIMENSION':
+      return { ...state, dimensions: [...state.dimensions, action.dimension], selection: [{ kind: 'dimension', id: action.dimension.id }] };
+
+    case 'UPDATE_DIMENSION':
+      return {
+        ...state,
+        dimensions: state.dimensions.map((dim) => (dim.id === action.id ? { ...dim, ...action.patch } : dim)),
+      };
+
+    case 'DELETE_DIMENSION':
+      return {
+        ...state,
+        dimensions: state.dimensions.filter((dim) => dim.id !== action.id),
+        selection: removeFromSelection(state.selection, 'dimension', action.id),
+      };
+
     case 'DELETE_MANY': {
       // 다중 선택 삭제를 한 건의 액션(=한 건의 Undo 기록)으로 처리한다.
       const ids: Record<ObjectKind, Set<string>> = {
@@ -233,6 +255,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         path: new Set(),
         label: new Set(),
         polygon: new Set(),
+        dimension: new Set(),
       };
       for (const item of action.items) ids[item.kind].add(item.id);
 
@@ -247,6 +270,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         paths: state.paths.filter((p) => !ids.path.has(p.id)),
         labels: state.labels.filter((l) => !ids.label.has(l.id)),
         polygons: state.polygons.filter((p) => !ids.polygon.has(p.id)),
+        dimensions: state.dimensions.filter((d) => !ids.dimension.has(d.id)),
         selection: [],
       };
     }
@@ -294,6 +318,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         paths: reassign(state.paths),
         labels: reassign(state.labels),
         polygons: reassign(state.polygons),
+        dimensions: reassign(state.dimensions),
       };
     }
 
@@ -318,6 +343,8 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
           return { ...state, labels: state.labels.map((l) => (l.id === action.id ? { ...l, layerId: action.layerId } : l)) };
         case 'polygon':
           return { ...state, polygons: state.polygons.map((p) => (p.id === action.id ? { ...p, layerId: action.layerId } : p)) };
+        case 'dimension':
+          return { ...state, dimensions: state.dimensions.map((d) => (d.id === action.id ? { ...d, layerId: action.layerId } : d)) };
         default:
           return state;
       }

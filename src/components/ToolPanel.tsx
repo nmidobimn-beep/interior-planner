@@ -39,6 +39,10 @@ const POLYGON_TOOLS: { id: ToolId; label: string; hint: string }[] = [
   },
 ];
 
+const DIMENSION_TOOLS: { id: ToolId; label: string; hint: string }[] = [
+  { id: 'dimension', label: '치수선', hint: '점을 클릭하고 다음 점을 클릭하면 거리를 표시하는 치수선을 그립니다' },
+];
+
 /** 왼쪽 도구 패널. 도구 전환과, 새로 그릴 벽의 기본 두께·길이 스냅 단위를 설정한다. */
 export function ToolPanel({ interaction }: ToolPanelProps) {
   const {
@@ -50,6 +54,8 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
     setWallLengthSnapMm,
     pathShape,
     setPathShape,
+    dimensionMode,
+    setDimensionMode,
     displayUnit,
     polygonDraft,
   } = interaction;
@@ -141,6 +147,37 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
       {activeTool === 'polygon' && polygonDraft.length > 0 && (
         <div className="side-panel-placeholder">
           꼭짓점 {polygonDraft.length}개 — 첫 점을 다시 클릭하거나 Enter로 완성 (최소 3개 필요)
+        </div>
+      )}
+
+      <div className="side-panel-title">치수선</div>
+      {renderToolGroup(DIMENSION_TOOLS)}
+      {activeTool === 'dimension' && (
+        <div className="tool-button-list">
+          <button
+            type="button"
+            className={`tool-button${dimensionMode === 'straight' ? ' is-active' : ''}`}
+            onClick={() => setDimensionMode('straight')}
+            title="두 점 사이의 직선 거리를 표시합니다"
+          >
+            직선거리
+          </button>
+          <button
+            type="button"
+            className={`tool-button${dimensionMode === 'horizontal' ? ' is-active' : ''}`}
+            onClick={() => setDimensionMode('horizontal')}
+            title="두 점의 가로(x) 거리만 표시합니다"
+          >
+            가로거리
+          </button>
+          <button
+            type="button"
+            className={`tool-button${dimensionMode === 'vertical' ? ' is-active' : ''}`}
+            onClick={() => setDimensionMode('vertical')}
+            title="두 점의 세로(y) 거리만 표시합니다"
+          >
+            세로거리
+          </button>
         </div>
       )}
     </>

@@ -132,6 +132,17 @@ export const POLYGON_VERTEX_HANDLE_RADIUS_PX = 6;
 /** 다각형 본체를 클릭으로 선택하기 위한 테두리 근처 허용치(px) — 내부 클릭은 항상 선택됨 */
 export const POLYGON_EDGE_HIT_TOLERANCE_PX = 6;
 
+/** --- 치수선(길이 제도선) 기본값 --- */
+export const DEFAULT_DIMENSION_MODE = 'straight' as const;
+/** 가로/세로 거리 모드에서, 측정 대상 두 점으로부터 치수선을 얼마나 떨어뜨려 그릴지(mm) */
+export const DIMENSION_OFFSET_MM = 300;
+/** 치수선 끝의 작은 눈금 표시 길이(px) */
+export const DIMENSION_TICK_LENGTH_PX = 6;
+/** 치수선/보조선을 클릭으로 선택하기 위한 허용치(px) */
+export const DIMENSION_HIT_TOLERANCE_PX = 8;
+/** 치수선 시작/끝점 손잡이의 화면 히트 반지름(px) */
+export const DIMENSION_ENDPOINT_HANDLE_RADIUS_PX = 6;
+
 /** --- 스냅 대상 종류 (CAD처럼 개별로 켜고 끌 수 있음) --- */
 export interface SnapCategoryFlags {
   endpoint: boolean;
@@ -207,4 +218,10 @@ export const COLORS = {
   polygonHandle: '#ffffff',
   polygonHandleStroke: '#1d4fc4',
   polygonPreview: 'rgba(214, 134, 47, 0.35)',
+
+  dimensionLine: '#2f9e6f',
+  dimensionExtensionLine: 'rgba(47, 158, 111, 0.55)',
+  dimensionSelected: '#1d4fc4',
+  dimensionText: '#1f2937',
+  dimensionHandle: '#ffffff',
 } as const;

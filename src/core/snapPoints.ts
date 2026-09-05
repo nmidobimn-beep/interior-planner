@@ -6,12 +6,14 @@ import type { Outlet } from '../types/outlet';
 import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
 import type { Polygon } from '../types/polygon';
+import type { DimensionLine } from '../types/dimension';
 import type { SnapCategoryFlags } from '../config/constants';
 import { openingEndpoints } from './openingGeometry';
 import { furnitureEdgeMidpoints, toWorldPolygon } from './furnitureGeometry';
 import { pathKeyPoints } from './pathGeometry';
 import { wallKeyPoints } from './wallGeometry';
 import { polygonKeyPoints } from './polygonGeometry';
+import { dimensionKeyPoints } from './dimensionGeometry';
 
 export interface SnapSourceEntities {
   walls: Wall[];
@@ -22,6 +24,7 @@ export interface SnapSourceEntities {
   paths: Path[];
   labels?: TextLabel[];
   polygons?: Polygon[];
+  dimensions?: DimensionLine[];
 }
 
 export interface SnapExclude {
@@ -30,11 +33,13 @@ export interface SnapExclude {
   pathId?: string;
   labelId?: string;
   polygonId?: string;
+  dimensionId?: string;
   /** 다중 선택 이동/회전 중 그룹 전체를 후보에서 뺄 때 쓴다(단수 필드와 함께 적용됨). */
   furnitureIds?: string[];
   pathIds?: string[];
   labelIds?: string[];
   polygonIds?: string[];
+  dimensionIds?: string[];
 }
 
 /**
@@ -46,7 +51,7 @@ export interface SnapExclude {
  * exclude로 지금 드래그 중인 객체 자신은 후보에서 뺄 수 있다(자기 자신에게 들러붙는 것 방지).
  */
 export function collectSnapCandidates(
-  { walls, furniture, doors, windows, outlets, paths, labels = [], polygons = [] }: SnapSourceEntities,
+  { walls, furniture, doors, windows, outlets, paths, labels = [], polygons = [], dimensions = [] }: SnapSourceEntities,
   categories: SnapCategoryFlags,
   exclude: SnapExclude = {},
 ): Point[] {
@@ -81,6 +86,10 @@ export function collectSnapCandidates(
     for (const polygon of polygons) {
       if (polygon.id === exclude.polygonId || exclude.polygonIds?.includes(polygon.id)) continue;
       points.push(...polygonKeyPoints(polygon));
+    }
+    for (const dim of dimensions) {
+      if (dim.id === exclude.dimensionId || exclude.dimensionIds?.includes(dim.id)) continue;
+      points.push(...dimensionKeyPoints(dim));
     }
   }
 

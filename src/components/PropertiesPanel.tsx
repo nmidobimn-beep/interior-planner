@@ -11,7 +11,10 @@ import {
 import { clampOpeningOffset } from '../core/openingGeometry';
 import { defaultControlPoint } from '../core/pathGeometry';
 import { endPointForLength, wallLengthMm } from '../core/wallGeometry';
+import { computeDimensionGeometry } from '../core/dimensionGeometry';
+import { formatLengthMm } from '../core/units';
 import type { HingeSide, SwingDirection } from '../types/opening';
+import type { DimensionMode } from '../types/dimension';
 import type { Layer } from '../types/layer';
 import type { ObjectKind } from '../state/floorPlanReducer';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
@@ -71,6 +74,7 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
     selectedPath,
     selectedLabel,
     selectedPolygon,
+    selectedDimension,
     selectionCount,
     updateWall,
     updateFurniture,
@@ -80,6 +84,7 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
     updatePath,
     updateLabel,
     updatePolygon,
+    updateDimension,
     moveObjectToLayer,
     deleteSelected,
   } = floorPlan;
@@ -580,6 +585,53 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           다각형 삭제
+        </button>
+      </>
+    );
+  }
+
+  if (selectedDimension) {
+    const geo = computeDimensionGeometry(selectedDimension);
+
+    return (
+      <>
+        <div className="side-panel-title">치수선 속성</div>
+
+        <div className="side-panel-placeholder">거리: {formatLengthMm(geo.valueMm, unit)}</div>
+
+        <div className="field-row">
+          <label htmlFor="dimension-mode">표시 방식</label>
+          <select
+            id="dimension-mode"
+            value={selectedDimension.mode}
+            onChange={(e) => updateDimension(selectedDimension.id, { mode: e.target.value as DimensionMode })}
+          >
+            <option value="straight">직선거리</option>
+            <option value="horizontal">가로거리</option>
+            <option value="vertical">세로거리</option>
+          </select>
+        </div>
+
+        <div className="field-row field-row--stacked">
+          <label htmlFor="dimension-memo">메모</label>
+          <textarea
+            id="dimension-memo"
+            rows={2}
+            value={selectedDimension.memo ?? ''}
+            onChange={(e) => updateDimension(selectedDimension.id, { memo: e.target.value })}
+          />
+        </div>
+
+        <LayerField
+          kind="dimension"
+          objectId={selectedDimension.id}
+          layerId={selectedDimension.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          치수선 삭제
         </button>
       </>
     );
