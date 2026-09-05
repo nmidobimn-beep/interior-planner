@@ -16,11 +16,21 @@ import type { Layer } from '../types/layer';
 import type { ObjectKind } from '../state/floorPlanReducer';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
+import type { UseFurnitureLibraryResult } from '../hooks/useFurnitureLibrary';
 import { LengthInput } from './LengthInput';
 
 interface PropertiesPanelProps {
   floorPlan: UseFloorPlanResult;
   interaction: UsePlanInteractionResult;
+  furnitureLibrary: UseFurnitureLibraryResult;
+}
+
+/** 이름(필수)·분류(선택)를 물어보고 "취소"면 null. 간단한 MVP라 window.prompt를 그대로 쓴다. */
+function promptLibrarySaveInfo(defaultName: string): { name: string; category: string } | null {
+  const name = window.prompt('라이브러리에 저장할 이름을 입력하세요', defaultName);
+  if (name === null) return null;
+  const category = window.prompt('분류(예: 침실/거실/주방) — 비워두면 "기타"로 저장됩니다', '') ?? '';
+  return { name: name.trim() || defaultName, category };
 }
 
 interface LayerFieldProps {
@@ -48,7 +58,8 @@ function LayerField({ kind, objectId, layerId, layers, moveObjectToLayer }: Laye
 }
 
 /** 오른쪽 속성 패널 — 선택된 객체의 속성을 편집하고 삭제할 수 있다. 길이값은 모두 현재 표시 단위(mm/cm/m)로 보여준다. */
-export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps) {
+export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: PropertiesPanelProps) {
+  const { saveFurnitureToLibrary, savePolygonToLibrary } = furnitureLibrary;
   const {
     walls,
     layers,
@@ -239,6 +250,17 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
           layers={layers}
           moveObjectToLayer={moveObjectToLayer}
         />
+
+        <button
+          type="button"
+          className="layer-add-button"
+          onClick={() => {
+            const info = promptLibrarySaveInfo(item.name);
+            if (info) saveFurnitureToLibrary(item, info.name, info.category);
+          }}
+        >
+          + 가구로 저장
+        </button>
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           가구 삭제
@@ -544,6 +566,17 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
           layers={layers}
           moveObjectToLayer={moveObjectToLayer}
         />
+
+        <button
+          type="button"
+          className="layer-add-button"
+          onClick={() => {
+            const info = promptLibrarySaveInfo(selectedPolygon.name);
+            if (info) savePolygonToLibrary(selectedPolygon, info.name, info.category);
+          }}
+        >
+          + 가구로 저장
+        </button>
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           다각형 삭제
