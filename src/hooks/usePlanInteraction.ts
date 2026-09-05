@@ -83,6 +83,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     selectOutlet,
     deselect,
     deleteSelected,
+    copySelected,
+    pasteClipboard,
+    undo,
+    redo,
   } = floorPlan;
 
   const [activeTool, setActiveToolState] = useState<ToolId>('select');
@@ -436,9 +440,32 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelected();
+        return;
+      }
+
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'c':
+          e.preventDefault();
+          copySelected();
+          break;
+        case 'v':
+          e.preventDefault();
+          pasteClipboard();
+          break;
+        case 'z':
+          e.preventDefault();
+          undo();
+          break;
+        case 'y':
+          e.preventDefault();
+          redo();
+          break;
       }
     },
-    [deleteSelected, endChain],
+    [copySelected, deleteSelected, endChain, pasteClipboard, redo, undo],
   );
 
   return {

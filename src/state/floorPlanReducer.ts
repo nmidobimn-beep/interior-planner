@@ -2,6 +2,7 @@ import type { Furniture } from '../types/furniture';
 import type { Wall } from '../types/wall';
 import type { Door, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
+import { createHistoryReducer } from './history';
 
 export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
@@ -144,3 +145,9 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
       return state;
   }
 }
+
+/** SELECT_OBJECT(선택 변경)만 히스토리에서 제외 — 그 외 데이터 변경 액션은 모두 Undo/Redo 대상. */
+export const historyFloorPlanReducer = createHistoryReducer<FloorPlanState, FloorPlanAction>(
+  floorPlanReducer,
+  (action) => action.type !== 'SELECT_OBJECT',
+);

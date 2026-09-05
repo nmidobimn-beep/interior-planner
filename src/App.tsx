@@ -32,6 +32,7 @@ function App() {
       <Toolbar
         viewportApi={viewportApi}
         interaction={interaction}
+        floorPlan={floorPlan}
         canvasSize={canvasSize}
         fitBounds={fitBounds}
         showDemo={showDemo}

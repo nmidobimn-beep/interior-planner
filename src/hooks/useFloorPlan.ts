@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer } from 'react';
+import { useCallback, useMemo, useReducer, useState } from 'react';
 import type { Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Furniture, FurnitureShape } from '../types/furniture';
@@ -6,7 +6,16 @@ import type { Door, HingeSide, SwingDirection, WindowOpening } from '../types/op
 import type { Outlet } from '../types/outlet';
 import { createId } from '../core/id';
 import { DEFAULT_FURNITURE_COLOR } from '../config/constants';
-import { floorPlanReducer, initialFloorPlanState, type ObjectKind, type SelectedObject } from '../state/floorPlanReducer';
+import { clampOpeningOffset } from '../core/openingGeometry';
+import { wallLengthMm } from '../core/wallGeometry';
+import {
+  historyFloorPlanReducer,
+  initialFloorPlanState,
+  type FloorPlanState,
+  type ObjectKind,
+  type SelectedObject,
+} from '../state/floorPlanReducer';
+import { REDO, UNDO, type HistoryState } from '../state/history';
 
 const FURNITURE_LABEL: Record<FurnitureShape, string> = {
   rectangle: '가구',
@@ -18,8 +27,22 @@ function findSelected<T extends { id: string }>(selection: SelectedObject, kind:
   return selection?.kind === kind ? (list.find((item) => item.id === selection.id) ?? null) : null;
 }
 
+/** 붙여넣기 시 원본과 겹치지 않도록 살짝 어긋나게 놓는 오프셋(mm) */
+const PASTE_OFFSET_MM = 200;
+
+type ClipboardEntry =
+  | { kind: 'wall'; data: Wall }
+  | { kind: 'furniture'; data: Furniture }
+  | { kind: 'door'; data: Door }
+  | { kind: 'window'; data: WindowOpening }
+  | { kind: 'outlet'; data: Outlet };
+
+const initialHistory: HistoryState<FloorPlanState> = { past: [], present: initialFloorPlanState, future: [] };
+
 export function useFloorPlan() {
-  const [state, dispatch] = useReducer(floorPlanReducer, initialFloorPlanState);
+  const [history, dispatch] = useReducer(historyFloorPlanReducer, initialHistory);
+  const state = history.present;
+  const [clipboard, setClipboard] = useState<ClipboardEntry | null>(null);
 
   const addWall = useCallback((start: Point, end: Point, thicknessMm: number): Wall => {
     const wall: Wall = { id: createId(), start, end, thicknessMm };
@@ -169,6 +192,68 @@ export function useFloorPlan() {
     [state.outlets, state.selectedObject],
   );
 
+  const copySelected = useCallback(() => {
+    if (selectedWall) setClipboard({ kind: 'wall', data: selectedWall });
+    else if (selectedFurniture) setClipboard({ kind: 'furniture', data: selectedFurniture });
+    else if (selectedDoor) setClipboard({ kind: 'door', data: selectedDoor });
+    else if (selectedWindow) setClipboard({ kind: 'window', data: selectedWindow });
+    else if (selectedOutlet) setClipboard({ kind: 'outlet', data: selectedOutlet });
+  }, [selectedDoor, selectedFurniture, selectedOutlet, selectedWall, selectedWindow]);
+
+  const pasteClipboard = useCallback(() => {
+    if (!clipboard) return;
+
+    // 붙여넣기를 연속으로 누르면 원본 위치가 아니라 방금 붙여넣은 위치를 기준으로 다시 어긋나게 놓는다
+    // (겹쳐 쌓이지 않고 대각선으로 흩어지는 통상적인 붙여넣기 동작).
+    switch (clipboard.kind) {
+      case 'wall': {
+        const w = clipboard.data;
+        const start = { x: w.start.x + PASTE_OFFSET_MM, y: w.start.y + PASTE_OFFSET_MM };
+        const end = { x: w.end.x + PASTE_OFFSET_MM, y: w.end.y + PASTE_OFFSET_MM };
+        addWall(start, end, w.thicknessMm);
+        setClipboard({ kind: 'wall', data: { ...w, start, end } });
+        break;
+      }
+      case 'furniture': {
+        const f = clipboard.data;
+        const center = { x: f.x + PASTE_OFFSET_MM, y: f.y + PASTE_OFFSET_MM };
+        const created = addFurniture(f.shape, center, { width: f.width, height: f.height }, { armThicknessMm: f.armThicknessMm });
+        updateFurniture(created.id, { name: f.name, rotationDeg: f.rotationDeg, color: f.color, memo: f.memo });
+        setClipboard({ kind: 'furniture', data: { ...f, x: center.x, y: center.y } });
+        break;
+      }
+      case 'door': {
+        const d = clipboard.data;
+        const wall = state.walls.find((w) => w.id === d.wallId);
+        if (!wall) break;
+        const offset = clampOpeningOffset(d.offsetMm + PASTE_OFFSET_MM, d.widthMm, wallLengthMm(wall));
+        addDoor(d.wallId, offset, d.widthMm, d.hingeSide, d.swingDirection);
+        setClipboard({ kind: 'door', data: { ...d, offsetMm: offset } });
+        break;
+      }
+      case 'window': {
+        const win = clipboard.data;
+        const wall = state.walls.find((w) => w.id === win.wallId);
+        if (!wall) break;
+        const offset = clampOpeningOffset(win.offsetMm + PASTE_OFFSET_MM, win.widthMm, wallLengthMm(wall));
+        const created = addWindow(win.wallId, offset, win.widthMm);
+        if (win.memo) updateWindow(created.id, { memo: win.memo });
+        setClipboard({ kind: 'window', data: { ...win, offsetMm: offset } });
+        break;
+      }
+      case 'outlet': {
+        const o = clipboard.data;
+        const center = { x: o.x + PASTE_OFFSET_MM, y: o.y + PASTE_OFFSET_MM };
+        addOutlet(center, o.count);
+        setClipboard({ kind: 'outlet', data: { ...o, x: center.x, y: center.y } });
+        break;
+      }
+    }
+  }, [addDoor, addFurniture, addOutlet, addWall, addWindow, clipboard, state.walls, updateFurniture, updateWindow]);
+
+  const undo = useCallback(() => dispatch(UNDO), []);
+  const redo = useCallback(() => dispatch(REDO), []);
+
   return {
     walls: state.walls,
     furniture: state.furniture,
@@ -203,6 +288,14 @@ export function useFloorPlan() {
     selectOutlet,
     deselect,
     deleteSelected,
+    canCopy: state.selectedObject !== null,
+    canPaste: clipboard !== null,
+    copySelected,
+    pasteClipboard,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
+    undo,
+    redo,
   };
 }
 

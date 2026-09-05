@@ -39,6 +39,15 @@
   background: var(--panel-bg);
 }
 
+.toolbar-group button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-group button:disabled:hover {
+  background: #fff;
+}
+
 .toolbar-zoom-readout {
   min-width: 48px;
   text-align: center;
