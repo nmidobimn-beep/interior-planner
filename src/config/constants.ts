@@ -70,6 +70,9 @@ export const ROTATION_HANDLE_OFFSET_MM = 300;
 /** 회전/이동 손잡이의 화면 히트 반지름(px) */
 export const FURNITURE_HANDLE_RADIUS_PX = 7;
 
+/** 새 가구의 기본 색상 (hex). 사용자가 속성 패널에서 도형별로 자유롭게 바꿀 수 있다. */
+export const DEFAULT_FURNITURE_COLOR = '#2f9e6f';
+
 export const COLORS = {
   background: '#f5f6f8',
   gridMinor: '#e4e6eb',
@@ -95,8 +98,6 @@ export const COLORS = {
   wallPreview: 'rgba(47, 111, 237, 0.55)',
   wallLengthLabel: '#1f2937',
 
-  furnitureFill: 'rgba(47, 158, 111, 0.18)',
-  furnitureStroke: '#2f9e6f',
   furnitureSelectedFill: 'rgba(47, 111, 237, 0.18)',
   furnitureSelectedStroke: '#1d4fc4',
   furnitureText: '#1f2937',

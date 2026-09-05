@@ -3,6 +3,7 @@ import type { Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Furniture, FurnitureShape } from '../types/furniture';
 import { createId } from '../core/id';
+import { DEFAULT_FURNITURE_COLOR } from '../config/constants';
 import { floorPlanReducer, initialFloorPlanState } from '../state/floorPlanReducer';
 
 const FURNITURE_LABEL: Record<FurnitureShape, string> = {
@@ -44,6 +45,7 @@ export function useFloorPlan() {
         width: size.width,
         height: size.height,
         rotationDeg: 0,
+        color: DEFAULT_FURNITURE_COLOR,
         ...extra,
       };
       dispatch({ type: 'ADD_FURNITURE', furniture });

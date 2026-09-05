@@ -1,6 +1,7 @@
 import type { Point } from '../types/geometry';
 import type { Furniture } from '../types/furniture';
 import { COLORS, FURNITURE_HANDLE_RADIUS_PX } from '../config/constants';
+import { hexToRgba } from './color';
 import { worldToScreen, type Viewport } from './viewport';
 import { rotationHandleWorldPoint, toWorldPolygon } from './furnitureGeometry';
 
@@ -19,8 +20,8 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, viewport: Viewport,
     const isSelected = item.id === selectedId;
     const center = worldToScreen(viewport, { x: item.x, y: item.y });
 
-    ctx.fillStyle = isSelected ? COLORS.furnitureSelectedFill : COLORS.furnitureFill;
-    ctx.strokeStyle = isSelected ? COLORS.furnitureSelectedStroke : COLORS.furnitureStroke;
+    ctx.fillStyle = isSelected ? COLORS.furnitureSelectedFill : hexToRgba(item.color, 0.18);
+    ctx.strokeStyle = isSelected ? COLORS.furnitureSelectedStroke : item.color;
     ctx.lineWidth = isSelected ? 2 : 1.5;
 
     if (item.shape === 'circle') {

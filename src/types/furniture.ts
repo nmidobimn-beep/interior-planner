@@ -18,5 +18,7 @@ export interface Furniture {
   rotationDeg: number;
   /** 'lshape' 전용: ㄱ자 팔의 두께(mm) */
   armThicknessMm?: number;
+  /** 채우기/선 색상 (hex, 예: '#2f9e6f') */
+  color: string;
   memo?: string;
 }

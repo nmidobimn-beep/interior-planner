@@ -150,6 +150,16 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
         )}
 
         <div className="field-row">
+          <label htmlFor="furniture-color">색상</label>
+          <input
+            id="furniture-color"
+            type="color"
+            value={item.color}
+            onChange={(e) => updateFurniture(item.id, { color: e.target.value })}
+          />
+        </div>
+
+        <div className="field-row">
           <label htmlFor="furniture-rotation">회전 (°)</label>
           <input
             id="furniture-rotation"
