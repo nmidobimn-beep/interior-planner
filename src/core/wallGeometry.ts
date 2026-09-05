@@ -78,6 +78,11 @@ export function hitTestWallEndpoint(point: Point, wall: Wall, toleranceMm: numbe
   return null;
 }
 
+/** 벽 전체를 이동할 때 스냅 후보로 함께 검사할 주요 기준점 — 시작점·끝점·중간점. */
+export function wallKeyPoints(wall: Pick<Wall, 'start' | 'end'>): Point[] {
+  return [wall.start, wall.end, { x: (wall.start.x + wall.end.x) / 2, y: (wall.start.y + wall.end.y) / 2 }];
+}
+
 export function wallDirectionUnit(wall: Pick<Wall, 'start' | 'end'>): Point {
   const len = wallLengthMm(wall) || 1;
   return { x: (wall.end.x - wall.start.x) / len, y: (wall.end.y - wall.start.y) / len };

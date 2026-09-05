@@ -22,6 +22,17 @@ export function sampleCurve(path: Path): Point[] {
   return points;
 }
 
+/**
+ * 동선을 이동할 때 스냅 후보로 함께 검사할 이 동선의 주요 기준점.
+ * 직선: 시작점·끝점·중간점. 곡선: 시작점·끝점·곡선 조절점·곡선 중간 대표점(t=0.5).
+ */
+export function pathKeyPoints(path: Path): Point[] {
+  if (path.curve && path.controlPoint) {
+    return [path.start, path.end, path.controlPoint, quadraticBezierPoint(path.start, path.controlPoint, path.end, 0.5)];
+  }
+  return [path.start, path.end, { x: (path.start.x + path.end.x) / 2, y: (path.start.y + path.end.y) / 2 }];
+}
+
 /** 동선 시작-끝의 중점에서 수직으로 약간 밀어낸 기본 제어점 (곡선으로 처음 바꿀 때 사용). */
 export function defaultControlPoint(start: Point, end: Point): Point {
   const dx = end.x - start.x;

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { Bounds, Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Path } from '../types/path';
-import type { FurnitureShape } from '../types/furniture';
+import type { Furniture, FurnitureShape } from '../types/furniture';
 import type { ObjectKind, SelectionItem } from '../state/floorPlanReducer';
 import {
   DEFAULT_ARM_THICKNESS_MM,
@@ -28,21 +28,22 @@ import {
   type SnapCategoryFlags,
 } from '../config/constants';
 import { screenToWorld, worldToScreen, type Viewport } from '../core/viewport';
-import { snapAngleDeg, snapGroupDelta, snapPoint, type SnapKind } from '../core/snap';
+import { snapAngleDeg, snapGroupDelta, snapObjectDelta, snapPoint, type SnapKind } from '../core/snap';
 import { nextDisplayUnit, type DisplayUnit } from '../core/units';
 import {
   distance,
   findWallAtPoint,
   hitTestWalls,
   projectPointOntoWall,
+  wallKeyPoints,
   wallLengthMm,
   type WallEndpointKey,
 } from '../core/wallGeometry';
-import { hitTestFurnitureList, rotationHandleWorldPoint } from '../core/furnitureGeometry';
+import { furnitureKeyPoints, hitTestFurnitureList, rotationHandleWorldPoint } from '../core/furnitureGeometry';
 import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from '../core/openingGeometry';
-import { defaultControlPoint, hitTestPaths } from '../core/pathGeometry';
+import { defaultControlPoint, hitTestPaths, pathKeyPoints } from '../core/pathGeometry';
 import { hitTestLabels } from '../core/labelGeometry';
-import { collectSnapCandidates } from '../core/snapPoints';
+import { collectSnapCandidates, type SnapExclude } from '../core/snapPoints';
 import { computeSelectionBounds, hitTestBoxSelection, rotatePointAround, selectionKeyPoints } from '../core/multiSelectGeometry';
 import { groupRotationHandleWorldPoint } from '../core/renderSelection';
 import type { UseFloorPlanResult } from './useFloorPlan';
@@ -64,12 +65,12 @@ type DragState =
   | { type: 'boxSelect'; startWorld: Point; additive: boolean }
   | { type: 'moveWall'; wallId: string; original: Wall; grabWorld: Point }
   | { type: 'endpointDrag'; wallId: string; key: WallEndpointKey; original: Wall }
-  | { type: 'moveFurniture'; furnitureId: string; original: Point; grabWorld: Point }
+  | { type: 'moveFurniture'; furnitureId: string; original: Furniture; grabWorld: Point }
   | { type: 'rotateFurniture'; furnitureId: string; originalRotationDeg: number }
   | { type: 'moveDoor'; doorId: string; originalOffsetMm: number }
   | { type: 'moveWindow'; windowId: string; originalOffsetMm: number }
   | { type: 'moveOutlet'; outletId: string; original: Point; grabWorld: Point }
-  | { type: 'movePath'; pathId: string; original: { start: Point; end: Point }; grabWorld: Point }
+  | { type: 'movePath'; pathId: string; original: Path; grabWorld: Point }
   | { type: 'pathEndpointDrag'; pathId: string; key: PathEndpointKey; original: Point }
   | { type: 'curveControlDrag'; pathId: string; original: Point }
   | { type: 'moveLabel'; labelId: string; original: Point; grabWorld: Point }
@@ -221,9 +222,8 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   }, []);
 
   const snapCandidates = useCallback(
-    (exclude?: { wallId?: string; furnitureId?: string; pathId?: string; furnitureIds?: string[]; pathIds?: string[] }) =>
-      collectSnapCandidates({ walls, furniture, doors, windows, outlets, paths }, snapCategories, exclude),
-    [doors, furniture, outlets, paths, snapCategories, walls, windows],
+    (exclude?: SnapExclude) => collectSnapCandidates({ walls, furniture, doors, windows, outlets, paths, labels }, snapCategories, exclude),
+    [doors, furniture, labels, outlets, paths, snapCategories, walls, windows],
   );
 
   /** 다중 선택 이동/회전 시작 시, 선택된 각 객체의 현재 상태를 스냅샷으로 캡처한다. */
@@ -486,7 +486,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         dragState.current = {
           type: 'moveFurniture',
           furnitureId: hitFurniture.id,
-          original: { x: hitFurniture.x, y: hitFurniture.y },
+          original: hitFurniture,
           grabWorld: worldRaw,
         };
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -547,7 +547,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         dragState.current = {
           type: 'movePath',
           pathId: hitPath.id,
-          original: { start: hitPath.start, end: hitPath.end },
+          original: hitPath,
           grabWorld: worldRaw,
         };
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -635,18 +635,16 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       }
 
       if (drag?.type === 'moveWall') {
+        // 벽 전체를 옮길 때는 시작점 하나가 아니라 시작·끝·중간점을 모두 스냅 후보로 검사한다.
         const candidatePoints = snapCandidates({ wallId: drag.wallId });
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
-        const rawNewStart = { x: drag.original.start.x + rawDelta.x, y: drag.original.start.y + rawDelta.y };
-        const snapped = snapPoint(rawNewStart, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
-        const actualDelta = { x: snapped.point.x - drag.original.start.x, y: snapped.point.y - drag.original.start.y };
-        updateWall(
-          drag.wallId,
-          { start: snapped.point, end: { x: drag.original.end.x + actualDelta.x, y: drag.original.end.y + actualDelta.y } },
-          true,
-        );
-        setPreviewPoint(snapped.point);
-        setPreviewSnapKind(snapped.kind);
+        const snap = snapObjectDelta(wallKeyPoints(drag.original), drag.original.start, rawDelta, candidatePoints, viewport.scale, snapEnabled);
+        const finalDelta = { x: rawDelta.x + snap.delta.x, y: rawDelta.y + snap.delta.y };
+        const newStart = { x: drag.original.start.x + finalDelta.x, y: drag.original.start.y + finalDelta.y };
+        const newEnd = { x: drag.original.end.x + finalDelta.x, y: drag.original.end.y + finalDelta.y };
+        updateWall(drag.wallId, { start: newStart, end: newEnd }, true);
+        setPreviewPoint(newStart);
+        setPreviewSnapKind(snap.kind);
         return;
       }
 
@@ -663,13 +661,17 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       }
 
       if (drag?.type === 'moveFurniture') {
+        // 가구를 옮길 때는 중심점 하나가 아니라 모서리 4개+변 중앙 4개+중심(원은 상하좌우+중심)을
+        // 모두 스냅 후보로 검사한다 — 마우스로 잡은 위치가 아니라 가구 자체의 기준점 기준.
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
-        const rawCenter = { x: drag.original.x + rawDelta.x, y: drag.original.y + rawDelta.y };
         const candidatePoints = snapCandidates({ furnitureId: drag.furnitureId });
-        const snapped = snapPoint(rawCenter, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
-        updateFurniture(drag.furnitureId, { x: snapped.point.x, y: snapped.point.y }, true);
-        setPreviewPoint(snapped.point);
-        setPreviewSnapKind(snapped.kind);
+        const original = { x: drag.original.x, y: drag.original.y };
+        const snap = snapObjectDelta(furnitureKeyPoints(drag.original), original, rawDelta, candidatePoints, viewport.scale, snapEnabled);
+        const finalDelta = { x: rawDelta.x + snap.delta.x, y: rawDelta.y + snap.delta.y };
+        const newCenter = { x: original.x + finalDelta.x, y: original.y + finalDelta.y };
+        updateFurniture(drag.furnitureId, { x: newCenter.x, y: newCenter.y }, true);
+        setPreviewPoint(newCenter);
+        setPreviewSnapKind(snap.kind);
         return;
       }
 
@@ -701,28 +703,30 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       if (drag?.type === 'moveOutlet') {
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
-        const rawCenter = { x: drag.original.x + rawDelta.x, y: drag.original.y + rawDelta.y };
         const candidatePoints = snapCandidates();
-        const snapped = snapPoint(rawCenter, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
-        updateOutlet(drag.outletId, { x: snapped.point.x, y: snapped.point.y }, true);
-        setPreviewPoint(snapped.point);
-        setPreviewSnapKind(snapped.kind);
+        const snap = snapObjectDelta([drag.original], drag.original, rawDelta, candidatePoints, viewport.scale, snapEnabled);
+        const finalDelta = { x: rawDelta.x + snap.delta.x, y: rawDelta.y + snap.delta.y };
+        const newPoint = { x: drag.original.x + finalDelta.x, y: drag.original.y + finalDelta.y };
+        updateOutlet(drag.outletId, { x: newPoint.x, y: newPoint.y }, true);
+        setPreviewPoint(newPoint);
+        setPreviewSnapKind(snap.kind);
         return;
       }
 
       if (drag?.type === 'movePath') {
+        // 동선 전체를 옮길 때는 시작·끝·중간점(곡선이면 조절점·곡선 중간점도)을 모두 스냅 후보로 검사한다.
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
-        const rawStart = { x: drag.original.start.x + rawDelta.x, y: drag.original.start.y + rawDelta.y };
         const candidatePoints = snapCandidates({ pathId: drag.pathId });
-        const snapped = snapPoint(rawStart, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
-        const actualDelta = { x: snapped.point.x - drag.original.start.x, y: snapped.point.y - drag.original.start.y };
-        updatePath(
-          drag.pathId,
-          { start: snapped.point, end: { x: drag.original.end.x + actualDelta.x, y: drag.original.end.y + actualDelta.y } },
-          true,
-        );
-        setPreviewPoint(snapped.point);
-        setPreviewSnapKind(snapped.kind);
+        const snap = snapObjectDelta(pathKeyPoints(drag.original), drag.original.start, rawDelta, candidatePoints, viewport.scale, snapEnabled);
+        const finalDelta = { x: rawDelta.x + snap.delta.x, y: rawDelta.y + snap.delta.y };
+        const newStart = { x: drag.original.start.x + finalDelta.x, y: drag.original.start.y + finalDelta.y };
+        const newEnd = { x: drag.original.end.x + finalDelta.x, y: drag.original.end.y + finalDelta.y };
+        const newControlPoint = drag.original.controlPoint
+          ? { x: drag.original.controlPoint.x + finalDelta.x, y: drag.original.controlPoint.y + finalDelta.y }
+          : undefined;
+        updatePath(drag.pathId, { start: newStart, end: newEnd, controlPoint: newControlPoint }, true);
+        setPreviewPoint(newStart);
+        setPreviewSnapKind(snap.kind);
         return;
       }
 
@@ -749,12 +753,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       if (drag?.type === 'moveLabel') {
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
-        const rawPosition = { x: drag.original.x + rawDelta.x, y: drag.original.y + rawDelta.y };
-        const candidatePoints = snapCandidates();
-        const snapped = snapPoint(rawPosition, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
-        updateLabel(drag.labelId, { x: snapped.point.x, y: snapped.point.y }, true);
-        setPreviewPoint(snapped.point);
-        setPreviewSnapKind(snapped.kind);
+        const candidatePoints = snapCandidates({ labelId: drag.labelId });
+        const snap = snapObjectDelta([drag.original], drag.original, rawDelta, candidatePoints, viewport.scale, snapEnabled);
+        const finalDelta = { x: rawDelta.x + snap.delta.x, y: rawDelta.y + snap.delta.y };
+        const newPoint = { x: drag.original.x + finalDelta.x, y: drag.original.y + finalDelta.y };
+        updateLabel(drag.labelId, { x: newPoint.x, y: newPoint.y }, true);
+        setPreviewPoint(newPoint);
+        setPreviewSnapKind(snap.kind);
         return;
       }
 
@@ -767,6 +772,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         const candidatePoints = snapCandidates({
           furnitureIds: memberIdsByKind(drag.members, 'furniture'),
           pathIds: memberIdsByKind(drag.members, 'path'),
+          labelIds: memberIdsByKind(drag.members, 'label'),
         });
         let finalDelta = rawDelta;
         let snapKind: SnapKind = null;

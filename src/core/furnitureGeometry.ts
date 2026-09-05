@@ -100,6 +100,44 @@ export function rotationHandleWorldPoint(furniture: Furniture): Point {
   return { x: r.x + furniture.x, y: r.y + furniture.y };
 }
 
+/** 다각형(사각형/ㄱ자형) 가구의 각 변 중간점(world 좌표). 원은 변이 없으므로 빈 배열. */
+export function furnitureEdgeMidpoints(furniture: Furniture): Point[] {
+  const polygon = toWorldPolygon(furniture);
+  if (!polygon) return [];
+  const mids: Point[] = [];
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    mids.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  }
+  return mids;
+}
+
+/**
+ * 가구를 이동할 때 스냅 후보로 함께 검사할 주요 기준점.
+ * 사각형/ㄱ자형: 중심 + 모든 꼭짓점 + 모든 변의 중간점 (사각형이면 중심1+모서리4+변중앙4=9개).
+ * 원형은 꼭짓점이 없으므로 중심 + 상하좌우 4개 지점을 대신 쓴다.
+ */
+export function furnitureKeyPoints(furniture: Furniture): Point[] {
+  const center = { x: furniture.x, y: furniture.y };
+
+  if (furniture.shape === 'circle') {
+    const r = furniture.width / 2;
+    return [
+      center,
+      { x: center.x + r, y: center.y },
+      { x: center.x - r, y: center.y },
+      { x: center.x, y: center.y + r },
+      { x: center.x, y: center.y - r },
+    ];
+  }
+
+  const polygon = toWorldPolygon(furniture);
+  if (!polygon) return [center];
+
+  return [center, ...polygon, ...furnitureEdgeMidpoints(furniture)];
+}
+
 /** 가구의 world 기준 경계 상자 (전체보기 계산용). */
 export function furnitureBounds(furniture: Furniture): Bounds {
   if (furniture.shape === 'circle') {

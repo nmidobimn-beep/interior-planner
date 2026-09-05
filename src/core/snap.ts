@@ -122,3 +122,28 @@ export function snapGroupDelta(movingPoints: Point[], candidatePoints: Point[], 
 
   return best ? { delta: best.delta, kind: 'endpoint' } : { delta: { x: 0, y: 0 }, kind: null };
 }
+
+/**
+ * 객체 하나를 이동할 때 쓰는 스냅. 그 객체의 여러 기준점(예: 가구의 모서리 4개+변중앙 4개+중심,
+ * 동선의 시작·끝·중간점 등 — "사용자가 마우스로 잡은 지점"이 아니라 객체 자체가 가진 기준점)을
+ * 모두 후보점과 비교해 가장 가까운 조합에 맞춘다. 맞는 후보가 없으면 (기존 동작대로) 중심 격자에
+ * 맞춘다 — 그래서 늘 어떤 형태로든 스냅이 걸린다는 기존 감각을 유지한다.
+ */
+export function snapObjectDelta(
+  originalKeyPoints: Point[],
+  fallbackPoint: Point,
+  rawDelta: Point,
+  candidatePoints: Point[],
+  scale: number,
+  enabled: boolean,
+): SnapDeltaResult {
+  if (!enabled) return { delta: { x: 0, y: 0 }, kind: null };
+
+  const movingKeyPoints = originalKeyPoints.map((p) => ({ x: p.x + rawDelta.x, y: p.y + rawDelta.y }));
+  const multiPoint = snapGroupDelta(movingKeyPoints, candidatePoints, scale, enabled);
+  if (multiPoint.kind) return multiPoint;
+
+  const rawFallback = { x: fallbackPoint.x + rawDelta.x, y: fallbackPoint.y + rawDelta.y };
+  const griddedFallback = snapToGrid(rawFallback, SNAP_GRID_MM);
+  return { delta: { x: griddedFallback.x - rawFallback.x, y: griddedFallback.y - rawFallback.y }, kind: 'grid' };
+}
