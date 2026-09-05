@@ -11,16 +11,43 @@ import {
 import { clampOpeningOffset } from '../core/openingGeometry';
 import { endPointForLength, wallLengthMm } from '../core/wallGeometry';
 import type { HingeSide, SwingDirection } from '../types/opening';
+import type { Layer } from '../types/layer';
+import type { ObjectKind } from '../state/floorPlanReducer';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 
 interface PropertiesPanelProps {
   floorPlan: UseFloorPlanResult;
 }
 
+interface LayerFieldProps {
+  kind: ObjectKind;
+  objectId: string;
+  layerId: string;
+  layers: Layer[];
+  moveObjectToLayer: UseFloorPlanResult['moveObjectToLayer'];
+}
+
+/** 어떤 객체 종류든 공통으로 쓰는 "레이어 이동" 필드. */
+function LayerField({ kind, objectId, layerId, layers, moveObjectToLayer }: LayerFieldProps) {
+  return (
+    <div className="field-row">
+      <label htmlFor={`${kind}-layer`}>레이어</label>
+      <select id={`${kind}-layer`} value={layerId} onChange={(e) => moveObjectToLayer(kind, objectId, e.target.value)}>
+        {layers.map((layer) => (
+          <option key={layer.id} value={layer.id}>
+            {layer.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 /** 오른쪽 속성 패널 — 선택된 벽 또는 가구의 속성을 편집하고 삭제할 수 있다. */
 export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
   const {
     walls,
+    layers,
     selectedWall,
     selectedFurniture,
     selectedDoor,
@@ -31,6 +58,7 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
     updateDoor,
     updateWindow,
     updateOutlet,
+    moveObjectToLayer,
     deleteSelected,
   } = floorPlan;
 
@@ -71,6 +99,8 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
             }}
           />
         </div>
+
+        <LayerField kind="wall" objectId={selectedWall.id} layerId={selectedWall.layerId} layers={layers} moveObjectToLayer={moveObjectToLayer} />
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           벽 삭제
@@ -201,6 +231,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
           />
         </div>
 
+        <LayerField
+          kind="furniture"
+          objectId={item.id}
+          layerId={item.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
         <button type="button" className="danger-button" onClick={deleteSelected}>
           가구 삭제
         </button>
@@ -260,6 +298,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
           </select>
         </div>
 
+        <LayerField
+          kind="door"
+          objectId={selectedDoor.id}
+          layerId={selectedDoor.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
         <button type="button" className="danger-button" onClick={deleteSelected}>
           문 삭제
         </button>
@@ -305,6 +351,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
           />
         </div>
 
+        <LayerField
+          kind="window"
+          objectId={selectedWindow.id}
+          layerId={selectedWindow.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
         <button type="button" className="danger-button" onClick={deleteSelected}>
           창문 삭제
         </button>
@@ -343,6 +397,14 @@ export function PropertiesPanel({ floorPlan }: PropertiesPanelProps) {
             onChange={(e) => updateOutlet(selectedOutlet.id, { memo: e.target.value })}
           />
         </div>
+
+        <LayerField
+          kind="outlet"
+          objectId={selectedOutlet.id}
+          layerId={selectedOutlet.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           콘센트 삭제

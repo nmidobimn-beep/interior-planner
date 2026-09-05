@@ -6,4 +6,5 @@ export interface Outlet {
   /** 콘센트 개수(구) */
   count: number;
   memo?: string;
+  layerId: string;
 }

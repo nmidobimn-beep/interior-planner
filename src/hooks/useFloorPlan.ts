@@ -4,6 +4,7 @@ import type { Wall } from '../types/wall';
 import type { Furniture, FurnitureShape } from '../types/furniture';
 import type { Door, HingeSide, SwingDirection, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
+import type { Layer } from '../types/layer';
 import { createId } from '../core/id';
 import { DEFAULT_FURNITURE_COLOR } from '../config/constants';
 import { clampOpeningOffset } from '../core/openingGeometry';
@@ -27,6 +28,10 @@ function findSelected<T extends { id: string }>(selection: SelectedObject, kind:
   return selection?.kind === kind ? (list.find((item) => item.id === selection.id) ?? null) : null;
 }
 
+function byVisibleLayer<T extends { layerId: string }>(items: T[], visibleLayerIds: Set<string>): T[] {
+  return items.filter((item) => visibleLayerIds.has(item.layerId));
+}
+
 /** 붙여넣기 시 원본과 겹치지 않도록 살짝 어긋나게 놓는 오프셋(mm) */
 const PASTE_OFFSET_MM = 200;
 
@@ -44,11 +49,14 @@ export function useFloorPlan() {
   const state = history.present;
   const [clipboard, setClipboard] = useState<ClipboardEntry | null>(null);
 
-  const addWall = useCallback((start: Point, end: Point, thicknessMm: number): Wall => {
-    const wall: Wall = { id: createId(), start, end, thicknessMm };
-    dispatch({ type: 'ADD_WALL', wall });
-    return wall;
-  }, []);
+  const addWall = useCallback(
+    (start: Point, end: Point, thicknessMm: number): Wall => {
+      const wall: Wall = { id: createId(), start, end, thicknessMm, layerId: state.activeLayerId };
+      dispatch({ type: 'ADD_WALL', wall });
+      return wall;
+    },
+    [state.activeLayerId],
+  );
 
   const updateWall = useCallback((id: string, patch: Partial<Omit<Wall, 'id'>>) => {
     dispatch({ type: 'UPDATE_WALL', id, patch });
@@ -75,12 +83,13 @@ export function useFloorPlan() {
         height: size.height,
         rotationDeg: 0,
         color: DEFAULT_FURNITURE_COLOR,
+        layerId: state.activeLayerId,
         ...extra,
       };
       dispatch({ type: 'ADD_FURNITURE', furniture });
       return furniture;
     },
-    [],
+    [state.activeLayerId],
   );
 
   const updateFurniture = useCallback((id: string, patch: Partial<Omit<Furniture, 'id'>>) => {
@@ -93,11 +102,11 @@ export function useFloorPlan() {
 
   const addDoor = useCallback(
     (wallId: string, offsetMm: number, widthMm: number, hingeSide: HingeSide = 'start', swingDirection: SwingDirection = 'in'): Door => {
-      const door: Door = { id: createId(), wallId, offsetMm, widthMm, hingeSide, swingDirection };
+      const door: Door = { id: createId(), wallId, offsetMm, widthMm, hingeSide, swingDirection, layerId: state.activeLayerId };
       dispatch({ type: 'ADD_DOOR', door });
       return door;
     },
-    [],
+    [state.activeLayerId],
   );
 
   const updateDoor = useCallback((id: string, patch: Partial<Omit<Door, 'id'>>) => {
@@ -108,11 +117,14 @@ export function useFloorPlan() {
     dispatch({ type: 'DELETE_DOOR', id });
   }, []);
 
-  const addWindow = useCallback((wallId: string, offsetMm: number, widthMm: number): WindowOpening => {
-    const window: WindowOpening = { id: createId(), wallId, offsetMm, widthMm };
-    dispatch({ type: 'ADD_WINDOW', window });
-    return window;
-  }, []);
+  const addWindow = useCallback(
+    (wallId: string, offsetMm: number, widthMm: number): WindowOpening => {
+      const window: WindowOpening = { id: createId(), wallId, offsetMm, widthMm, layerId: state.activeLayerId };
+      dispatch({ type: 'ADD_WINDOW', window });
+      return window;
+    },
+    [state.activeLayerId],
+  );
 
   const updateWindow = useCallback((id: string, patch: Partial<Omit<WindowOpening, 'id'>>) => {
     dispatch({ type: 'UPDATE_WINDOW', id, patch });
@@ -122,11 +134,14 @@ export function useFloorPlan() {
     dispatch({ type: 'DELETE_WINDOW', id });
   }, []);
 
-  const addOutlet = useCallback((center: Point, count = 1): Outlet => {
-    const outlet: Outlet = { id: createId(), x: center.x, y: center.y, count };
-    dispatch({ type: 'ADD_OUTLET', outlet });
-    return outlet;
-  }, []);
+  const addOutlet = useCallback(
+    (center: Point, count = 1): Outlet => {
+      const outlet: Outlet = { id: createId(), x: center.x, y: center.y, count, layerId: state.activeLayerId };
+      dispatch({ type: 'ADD_OUTLET', outlet });
+      return outlet;
+    },
+    [state.activeLayerId],
+  );
 
   const updateOutlet = useCallback((id: string, patch: Partial<Omit<Outlet, 'id'>>) => {
     dispatch({ type: 'UPDATE_OUTLET', id, patch });
@@ -254,12 +269,43 @@ export function useFloorPlan() {
   const undo = useCallback(() => dispatch(UNDO), []);
   const redo = useCallback(() => dispatch(REDO), []);
 
+  const addLayer = useCallback(
+    (name?: string) => {
+      const layer: Layer = { id: createId(), name: name?.trim() || `레이어 ${state.layers.length + 1}`, visible: true };
+      dispatch({ type: 'ADD_LAYER', layer });
+      return layer;
+    },
+    [state.layers.length],
+  );
+  const renameLayer = useCallback((id: string, name: string) => dispatch({ type: 'RENAME_LAYER', id, name }), []);
+  const toggleLayerVisibility = useCallback((id: string) => dispatch({ type: 'TOGGLE_LAYER_VISIBILITY', id }), []);
+  const deleteLayer = useCallback((id: string) => dispatch({ type: 'DELETE_LAYER', id }), []);
+  const setActiveLayer = useCallback((id: string) => dispatch({ type: 'SET_ACTIVE_LAYER', id }), []);
+  const moveObjectToLayer = useCallback(
+    (kind: ObjectKind, id: string, layerId: string) => dispatch({ type: 'MOVE_OBJECT_TO_LAYER', kind, id, layerId }),
+    [],
+  );
+
+  const visibleLayerIds = useMemo(() => new Set(state.layers.filter((l) => l.visible).map((l) => l.id)), [state.layers]);
+  const visibleWalls = useMemo(() => byVisibleLayer(state.walls, visibleLayerIds), [state.walls, visibleLayerIds]);
+  const visibleFurniture = useMemo(() => byVisibleLayer(state.furniture, visibleLayerIds), [state.furniture, visibleLayerIds]);
+  const visibleDoors = useMemo(() => byVisibleLayer(state.doors, visibleLayerIds), [state.doors, visibleLayerIds]);
+  const visibleWindows = useMemo(() => byVisibleLayer(state.windows, visibleLayerIds), [state.windows, visibleLayerIds]);
+  const visibleOutlets = useMemo(() => byVisibleLayer(state.outlets, visibleLayerIds), [state.outlets, visibleLayerIds]);
+
   return {
     walls: state.walls,
     furniture: state.furniture,
     doors: state.doors,
     windows: state.windows,
     outlets: state.outlets,
+    visibleWalls,
+    visibleFurniture,
+    visibleDoors,
+    visibleWindows,
+    visibleOutlets,
+    layers: state.layers,
+    activeLayerId: state.activeLayerId,
     selectedObject: state.selectedObject,
     selectedWall,
     selectedFurniture,
@@ -296,6 +342,12 @@ export function useFloorPlan() {
     canRedo: history.future.length > 0,
     undo,
     redo,
+    addLayer,
+    renameLayer,
+    toggleLayerVisibility,
+    deleteLayer,
+    setActiveLayer,
+    moveObjectToLayer,
   };
 }
 

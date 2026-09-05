@@ -25,11 +25,11 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, onWheel } = viewportApi;
   const {
-    walls,
-    furniture,
-    doors,
-    windows,
-    outlets,
+    visibleWalls: walls,
+    visibleFurniture: furniture,
+    visibleDoors: doors,
+    visibleWindows: windows,
+    visibleOutlets: outlets,
     selectedWall,
     selectedFurniture,
     selectedDoor,

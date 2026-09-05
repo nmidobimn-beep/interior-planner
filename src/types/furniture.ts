@@ -21,4 +21,5 @@ export interface Furniture {
   /** 채우기/선 색상 (hex, 예: '#2f9e6f') */
   color: string;
   memo?: string;
+  layerId: string;
 }

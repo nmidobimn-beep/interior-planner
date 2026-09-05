@@ -245,6 +245,96 @@
   cursor: crosshair;
 }
 
+/* --- Layer panel --- */
+.layer-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.layer-row:hover {
+  background: #eef0f4;
+}
+
+.layer-row.is-active {
+  border-color: #2f6fed;
+  background: rgba(47, 111, 237, 0.08);
+}
+
+.layer-visibility-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px;
+  line-height: 1;
+}
+
+.layer-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.layer-name-input:hover,
+.layer-name-input:focus {
+  border-color: var(--border);
+  background: #fff;
+}
+
+.layer-delete-button {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.layer-delete-button:hover {
+  color: #e0554f;
+}
+
+.layer-delete-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.layer-add-button {
+  width: 100%;
+  height: 30px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.layer-add-button:hover {
+  background: #eef0f4;
+}
+
 /* --- Status bar --- */
 .status-bar {
   display: flex;

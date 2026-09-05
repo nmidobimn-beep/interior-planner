@@ -5,6 +5,7 @@ import { PlanCanvas } from './components/PlanCanvas';
 import { StatusBar } from './components/StatusBar';
 import { ToolPanel } from './components/ToolPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
+import { LayerPanel } from './components/LayerPanel';
 import { computePlanBounds } from './core/bounds';
 import { DEMO_BOUNDS } from './core/demoScene';
 import { useFloorPlan } from './hooks/useFloorPlan';
@@ -23,8 +24,8 @@ function App() {
   const handleSizeChange = useCallback((size: Size) => setCanvasSize(size), []);
 
   const fitBounds = useMemo(
-    () => computePlanBounds(floorPlan.walls, floorPlan.furniture, floorPlan.outlets) ?? DEMO_BOUNDS,
-    [floorPlan.walls, floorPlan.furniture, floorPlan.outlets],
+    () => computePlanBounds(floorPlan.visibleWalls, floorPlan.visibleFurniture, floorPlan.visibleOutlets) ?? DEMO_BOUNDS,
+    [floorPlan.visibleWalls, floorPlan.visibleFurniture, floorPlan.visibleOutlets],
   );
 
   return (
@@ -56,9 +57,7 @@ function App() {
 
         <aside className="side-panel side-panel-right">
           <PropertiesPanel floorPlan={floorPlan} />
-
-          <div className="side-panel-title">레이어</div>
-          <div className="side-panel-placeholder">레이어 목록 (6단계에서 추가 예정)</div>
+          <LayerPanel floorPlan={floorPlan} />
         </aside>
       </div>
 

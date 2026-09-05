@@ -59,11 +59,11 @@ const isFurnitureTool = (tool: ToolId): tool is FurnitureShape =>
  */
 export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanInteractionArgs) {
   const {
-    walls,
-    furniture,
-    doors,
-    windows,
-    outlets,
+    visibleWalls: walls,
+    visibleFurniture: furniture,
+    visibleDoors: doors,
+    visibleWindows: windows,
+    visibleOutlets: outlets,
     selectedWall,
     selectedFurniture,
     addWall,

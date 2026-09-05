@@ -2,10 +2,14 @@ import type { Furniture } from '../types/furniture';
 import type { Wall } from '../types/wall';
 import type { Door, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
+import type { Layer } from '../types/layer';
 import { createHistoryReducer } from './history';
 
 export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
+
+/** 새 프로젝트에 항상 존재하는 첫 레이어의 고정 id (마지막 레이어는 삭제할 수 없어 항상 최소 1개 존재). */
+export const DEFAULT_LAYER_ID = 'layer-default';
 
 /**
  * 도면의 모든 객체를 담는 단일 상태.
@@ -17,6 +21,8 @@ export interface FloorPlanState {
   doors: Door[];
   windows: WindowOpening[];
   outlets: Outlet[];
+  layers: Layer[];
+  activeLayerId: string;
   selectedObject: SelectedObject;
 }
 
@@ -26,6 +32,8 @@ export const initialFloorPlanState: FloorPlanState = {
   doors: [],
   windows: [],
   outlets: [],
+  layers: [{ id: DEFAULT_LAYER_ID, name: '레이어 1', visible: true }],
+  activeLayerId: DEFAULT_LAYER_ID,
   selectedObject: null,
 };
 
@@ -45,7 +53,13 @@ export type FloorPlanAction =
   | { type: 'ADD_OUTLET'; outlet: Outlet }
   | { type: 'UPDATE_OUTLET'; id: string; patch: Partial<Omit<Outlet, 'id'>> }
   | { type: 'DELETE_OUTLET'; id: string }
-  | { type: 'SELECT_OBJECT'; selection: SelectedObject };
+  | { type: 'SELECT_OBJECT'; selection: SelectedObject }
+  | { type: 'ADD_LAYER'; layer: Layer }
+  | { type: 'RENAME_LAYER'; id: string; name: string }
+  | { type: 'TOGGLE_LAYER_VISIBILITY'; id: string }
+  | { type: 'DELETE_LAYER'; id: string }
+  | { type: 'SET_ACTIVE_LAYER'; id: string }
+  | { type: 'MOVE_OBJECT_TO_LAYER'; kind: ObjectKind; id: string; layerId: string };
 
 function clearSelectionIfMatches(state: FloorPlanState, kind: ObjectKind, id: string): SelectedObject {
   return state.selectedObject?.kind === kind && state.selectedObject.id === id ? null : state.selectedObject;
@@ -140,6 +154,55 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
 
     case 'SELECT_OBJECT':
       return { ...state, selectedObject: action.selection };
+
+    case 'ADD_LAYER':
+      return { ...state, layers: [...state.layers, action.layer], activeLayerId: action.layer.id };
+
+    case 'RENAME_LAYER':
+      return { ...state, layers: state.layers.map((l) => (l.id === action.id ? { ...l, name: action.name } : l)) };
+
+    case 'TOGGLE_LAYER_VISIBILITY':
+      return { ...state, layers: state.layers.map((l) => (l.id === action.id ? { ...l, visible: !l.visible } : l)) };
+
+    case 'DELETE_LAYER': {
+      // 마지막 남은 레이어는 삭제할 수 없다 (모든 객체가 레이어를 잃지 않도록).
+      if (state.layers.length <= 1) return state;
+      const remaining = state.layers.filter((l) => l.id !== action.id);
+      const fallbackId = remaining[0].id;
+      const reassign = <T extends { layerId: string }>(items: T[]): T[] =>
+        items.map((item) => (item.layerId === action.id ? { ...item, layerId: fallbackId } : item));
+
+      return {
+        ...state,
+        layers: remaining,
+        activeLayerId: state.activeLayerId === action.id ? fallbackId : state.activeLayerId,
+        walls: reassign(state.walls),
+        furniture: reassign(state.furniture),
+        doors: reassign(state.doors),
+        windows: reassign(state.windows),
+        outlets: reassign(state.outlets),
+      };
+    }
+
+    case 'SET_ACTIVE_LAYER':
+      return { ...state, activeLayerId: action.id };
+
+    case 'MOVE_OBJECT_TO_LAYER': {
+      switch (action.kind) {
+        case 'wall':
+          return { ...state, walls: state.walls.map((w) => (w.id === action.id ? { ...w, layerId: action.layerId } : w)) };
+        case 'furniture':
+          return { ...state, furniture: state.furniture.map((f) => (f.id === action.id ? { ...f, layerId: action.layerId } : f)) };
+        case 'door':
+          return { ...state, doors: state.doors.map((d) => (d.id === action.id ? { ...d, layerId: action.layerId } : d)) };
+        case 'window':
+          return { ...state, windows: state.windows.map((w) => (w.id === action.id ? { ...w, layerId: action.layerId } : w)) };
+        case 'outlet':
+          return { ...state, outlets: state.outlets.map((o) => (o.id === action.id ? { ...o, layerId: action.layerId } : o)) };
+        default:
+          return state;
+      }
+    }
 
     default:
       return state;

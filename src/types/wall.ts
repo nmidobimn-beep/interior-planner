@@ -11,4 +11,5 @@ export interface Wall {
   end: Point;
   /** 벽 두께 (mm) */
   thicknessMm: number;
+  layerId: string;
 }

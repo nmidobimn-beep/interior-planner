@@ -13,6 +13,7 @@ export interface Door {
   widthMm: number;
   hingeSide: HingeSide;
   swingDirection: SwingDirection;
+  layerId: string;
 }
 
 export interface WindowOpening {
@@ -21,4 +22,5 @@ export interface WindowOpening {
   offsetMm: number;
   widthMm: number;
   memo?: string;
+  layerId: string;
 }
