@@ -269,7 +269,8 @@
 .plan-canvas--door,
 .plan-canvas--window,
 .plan-canvas--outlet,
-.plan-canvas--path {
+.plan-canvas--path,
+.plan-canvas--label {
   cursor: crosshair;
 }
 

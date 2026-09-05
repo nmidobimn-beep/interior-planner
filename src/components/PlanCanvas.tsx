@@ -7,6 +7,7 @@ import { drawSnapIndicator, drawWallPreview, drawWalls } from '../core/renderWal
 import { drawFurniture } from '../core/renderFurniture';
 import { drawDoors, drawOutlets, drawWindows } from '../core/renderOpenings';
 import { drawPathPreview, drawPaths } from '../core/renderPath';
+import { drawLabels } from '../core/renderLabel';
 import type { UseViewportResult } from '../hooks/useViewport';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
@@ -32,12 +33,14 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     visibleWindows: windows,
     visibleOutlets: outlets,
     visiblePaths: paths,
+    visibleLabels: labels,
     selectedWall,
     selectedFurniture,
     selectedDoor,
     selectedWindow,
     selectedOutlet,
     selectedPath,
+    selectedLabel,
   } = floorPlan;
   const {
     activeTool,
@@ -100,6 +103,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     drawFurniture(ctx, viewport, furniture, selectedFurniture?.id ?? null);
     drawOutlets(ctx, viewport, outlets, selectedOutlet?.id ?? null);
     drawPaths(ctx, viewport, paths, selectedPath?.id ?? null);
+    drawLabels(ctx, viewport, labels, selectedLabel?.id ?? null);
 
     if (chainStart && previewPoint) {
       if (activeTool === 'path') drawPathPreview(ctx, viewport, chainStart, previewPoint);
@@ -120,12 +124,14 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     windows,
     outlets,
     paths,
+    labels,
     selectedWall,
     selectedFurniture,
     selectedDoor,
     selectedWindow,
     selectedOutlet,
     selectedPath,
+    selectedLabel,
     activeTool,
     chainStart,
     previewPoint,

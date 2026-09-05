@@ -4,9 +4,10 @@ import type { Door, WindowOpening } from '../types/opening';
 import type { Outlet } from '../types/outlet';
 import type { Layer } from '../types/layer';
 import type { Path } from '../types/path';
+import type { TextLabel } from '../types/label';
 import { createHistoryReducer } from './history';
 
-export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path';
+export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
 
 /** 새 프로젝트에 항상 존재하는 첫 레이어의 고정 id (마지막 레이어는 삭제할 수 없어 항상 최소 1개 존재). */
@@ -23,6 +24,7 @@ export interface FloorPlanState {
   windows: WindowOpening[];
   outlets: Outlet[];
   paths: Path[];
+  labels: TextLabel[];
   layers: Layer[];
   activeLayerId: string;
   selectedObject: SelectedObject;
@@ -35,6 +37,7 @@ export const initialFloorPlanState: FloorPlanState = {
   windows: [],
   outlets: [],
   paths: [],
+  labels: [],
   layers: [{ id: DEFAULT_LAYER_ID, name: '레이어 1', visible: true }],
   activeLayerId: DEFAULT_LAYER_ID,
   selectedObject: null,
@@ -59,6 +62,9 @@ export type FloorPlanAction =
   | { type: 'ADD_PATH'; path: Path }
   | { type: 'UPDATE_PATH'; id: string; patch: Partial<Omit<Path, 'id'>>; transient?: boolean }
   | { type: 'DELETE_PATH'; id: string }
+  | { type: 'ADD_LABEL'; label: TextLabel }
+  | { type: 'UPDATE_LABEL'; id: string; patch: Partial<Omit<TextLabel, 'id'>>; transient?: boolean }
+  | { type: 'DELETE_LABEL'; id: string }
   | { type: 'SELECT_OBJECT'; selection: SelectedObject }
   | { type: 'ADD_LAYER'; layer: Layer }
   | { type: 'RENAME_LAYER'; id: string; name: string }
@@ -171,6 +177,19 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         selectedObject: clearSelectionIfMatches(state, 'path', action.id),
       };
 
+    case 'ADD_LABEL':
+      return { ...state, labels: [...state.labels, action.label], selectedObject: { kind: 'label', id: action.label.id } };
+
+    case 'UPDATE_LABEL':
+      return { ...state, labels: state.labels.map((label) => (label.id === action.id ? { ...label, ...action.patch } : label)) };
+
+    case 'DELETE_LABEL':
+      return {
+        ...state,
+        labels: state.labels.filter((label) => label.id !== action.id),
+        selectedObject: clearSelectionIfMatches(state, 'label', action.id),
+      };
+
     case 'SELECT_OBJECT':
       return { ...state, selectedObject: action.selection };
 
@@ -201,6 +220,7 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         windows: reassign(state.windows),
         outlets: reassign(state.outlets),
         paths: reassign(state.paths),
+        labels: reassign(state.labels),
       };
     }
 
@@ -221,6 +241,8 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
           return { ...state, outlets: state.outlets.map((o) => (o.id === action.id ? { ...o, layerId: action.layerId } : o)) };
         case 'path':
           return { ...state, paths: state.paths.map((p) => (p.id === action.id ? { ...p, layerId: action.layerId } : p)) };
+        case 'label':
+          return { ...state, labels: state.labels.map((l) => (l.id === action.id ? { ...l, layerId: action.layerId } : l)) };
         default:
           return state;
       }

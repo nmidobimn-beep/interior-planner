@@ -25,9 +25,20 @@ function App() {
 
   const fitBounds = useMemo(
     () =>
-      computePlanBounds(floorPlan.visibleWalls, floorPlan.visibleFurniture, floorPlan.visibleOutlets, floorPlan.visiblePaths) ??
-      DEMO_BOUNDS,
-    [floorPlan.visibleWalls, floorPlan.visibleFurniture, floorPlan.visibleOutlets, floorPlan.visiblePaths],
+      computePlanBounds(
+        floorPlan.visibleWalls,
+        floorPlan.visibleFurniture,
+        floorPlan.visibleOutlets,
+        floorPlan.visiblePaths,
+        floorPlan.visibleLabels,
+      ) ?? DEMO_BOUNDS,
+    [
+      floorPlan.visibleWalls,
+      floorPlan.visibleFurniture,
+      floorPlan.visibleOutlets,
+      floorPlan.visiblePaths,
+      floorPlan.visibleLabels,
+    ],
   );
 
   return (

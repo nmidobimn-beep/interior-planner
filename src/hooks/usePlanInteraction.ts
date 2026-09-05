@@ -7,6 +7,7 @@ import {
   DEFAULT_ARM_THICKNESS_MM,
   DEFAULT_DOOR_WIDTH_MM,
   DEFAULT_FURNITURE_SIZE,
+  DEFAULT_LABEL_TEXT,
   DEFAULT_OUTLET_COUNT,
   DEFAULT_SNAP_CATEGORIES,
   DEFAULT_WALL_LENGTH_SNAP_MM,
@@ -14,6 +15,7 @@ import {
   DEFAULT_WINDOW_WIDTH_MM,
   CURVE_CONTROL_HANDLE_RADIUS_PX,
   FURNITURE_HANDLE_RADIUS_PX,
+  LABEL_HIT_RADIUS_PX,
   MIN_PATH_LENGTH_MM,
   MIN_WALL_LENGTH_MM,
   OPENING_WALL_HIT_TOLERANCE_PX,
@@ -37,10 +39,11 @@ import {
 import { hitTestFurnitureList, rotationHandleWorldPoint } from '../core/furnitureGeometry';
 import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from '../core/openingGeometry';
 import { defaultControlPoint, hitTestPaths } from '../core/pathGeometry';
+import { hitTestLabels } from '../core/labelGeometry';
 import { collectSnapCandidates } from '../core/snapPoints';
 import type { UseFloorPlanResult } from './useFloorPlan';
 
-export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet' | 'path';
+export type ToolId = 'select' | 'wall' | FurnitureShape | 'door' | 'window' | 'outlet' | 'path' | 'label';
 export type PathShape = 'straight' | 'curve';
 
 type PathEndpointKey = 'start' | 'end';
@@ -56,7 +59,8 @@ type DragState =
   | { type: 'moveOutlet'; outletId: string; original: Point; grabWorld: Point }
   | { type: 'movePath'; pathId: string; original: { start: Point; end: Point }; grabWorld: Point }
   | { type: 'pathEndpointDrag'; pathId: string; key: PathEndpointKey; original: Point }
-  | { type: 'curveControlDrag'; pathId: string; original: Point };
+  | { type: 'curveControlDrag'; pathId: string; original: Point }
+  | { type: 'moveLabel'; labelId: string; original: Point; grabWorld: Point };
 
 interface UsePlanInteractionArgs {
   viewport: Viewport;
@@ -102,6 +106,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     visibleWindows: windows,
     visibleOutlets: outlets,
     visiblePaths: paths,
+    visibleLabels: labels,
     selectedWall,
     selectedFurniture,
     selectedPath,
@@ -117,12 +122,15 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     updateOutlet,
     addPath,
     updatePath,
+    addLabel,
+    updateLabel,
     selectWall,
     selectFurniture,
     selectDoor,
     selectWindow,
     selectOutlet,
     selectPath,
+    selectLabel,
     deselect,
     deleteSelected,
     copySelected,
@@ -240,6 +248,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (activeTool === 'label') {
+        const snapped = snapPoint(worldRaw, { candidatePoints: snapCandidates(), scale: viewport.scale, enabled: snapEnabled });
+        addLabel(snapped.point, DEFAULT_LABEL_TEXT);
+        setActiveTool('select');
+        return;
+      }
+
       if (activeTool === 'path') {
         const candidatePoints = snapCandidates();
         if (!chainStart) {
@@ -322,6 +337,20 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         }
       }
 
+      const hitLabel = hitTestLabels(worldRaw, labels, LABEL_HIT_RADIUS_PX / viewport.scale);
+      if (hitLabel) {
+        selectLabel(hitLabel.id);
+        beginTransientEdit();
+        dragState.current = {
+          type: 'moveLabel',
+          labelId: hitLabel.id,
+          original: { x: hitLabel.x, y: hitLabel.y },
+          grabWorld: worldRaw,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
       const hitFurniture = hitTestFurnitureList(worldRaw, furniture);
       if (hitFurniture) {
         selectFurniture(hitFurniture.id);
@@ -400,6 +429,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       activeTool,
       addDoor,
       addFurniture,
+      addLabel,
       addOutlet,
       addPath,
       addWall,
@@ -411,11 +441,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       doors,
       furniture,
       getScreenPoint,
+      labels,
       outlets,
       pathShape,
       paths,
       selectDoor,
       selectFurniture,
+      selectLabel,
       selectOutlet,
       selectPath,
       selectWall,
@@ -561,6 +593,17 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (drag?.type === 'moveLabel') {
+        const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
+        const rawPosition = { x: drag.original.x + rawDelta.x, y: drag.original.y + rawDelta.y };
+        const candidatePoints = snapCandidates();
+        const snapped = snapPoint(rawPosition, { candidatePoints, scale: viewport.scale, enabled: snapEnabled });
+        updateLabel(drag.labelId, { x: snapped.point.x, y: snapped.point.y }, true);
+        setPreviewPoint(snapped.point);
+        setPreviewSnapKind(snapped.kind);
+        return;
+      }
+
       if ((activeTool === 'wall' || activeTool === 'path') && chainStart) {
         const candidatePoints = snapCandidates();
         const snapped = snapPoint(worldRaw, {
@@ -589,6 +632,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       snapEnabled,
       updateDoor,
       updateFurniture,
+      updateLabel,
       updateOutlet,
       updatePath,
       updateWall,
@@ -646,9 +690,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           const current = paths.find((p) => p.id === drag.pathId);
           return !!current && !!current.controlPoint && !pointsEqual(current.controlPoint, drag.original);
         }
+        case 'moveLabel': {
+          const current = labels.find((l) => l.id === drag.labelId);
+          return !!current && !pointsEqual({ x: current.x, y: current.y }, drag.original);
+        }
       }
     },
-    [doors, furniture, outlets, paths, walls, windows],
+    [doors, furniture, labels, outlets, paths, walls, windows],
   );
 
   const endDrag = useCallback(

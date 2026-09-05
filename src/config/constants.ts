@@ -113,6 +113,13 @@ export const CURVE_CONTROL_HANDLE_RADIUS_PX = 7;
 /** 곡선을 선분들로 근사해 히트테스트/경계를 계산할 때 나눌 구간 수 */
 export const CURVE_SAMPLE_SEGMENTS = 24;
 
+/** --- 텍스트 라벨 기본값 --- */
+export const DEFAULT_LABEL_TEXT = '텍스트';
+/** 라벨 글자 크기(px) — 확대/축소와 무관하게 항상 읽기 좋은 크기로 표시(가구 이름표와 동일한 방식) */
+export const LABEL_FONT_SIZE_PX = 14;
+/** 라벨을 클릭으로 선택하기 위한 히트 반지름(px, 대략 텍스트 한 줄 높이) */
+export const LABEL_HIT_RADIUS_PX = 40;
+
 /** --- 스냅 대상 종류 (CAD처럼 개별로 켜고 끌 수 있음) --- */
 export interface SnapCategoryFlags {
   endpoint: boolean;
@@ -172,4 +179,8 @@ export const COLORS = {
   pathHandle: '#ffffff',
   pathControlHandle: '#9a4fd6',
   pathControlLine: 'rgba(154, 79, 214, 0.5)',
+
+  labelText: '#1f2937',
+  labelSelectedText: '#1d4fc4',
+  labelSelectedBox: '#1d4fc4',
 } as const;

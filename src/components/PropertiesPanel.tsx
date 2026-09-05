@@ -58,12 +58,14 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
     selectedWindow,
     selectedOutlet,
     selectedPath,
+    selectedLabel,
     updateWall,
     updateFurniture,
     updateDoor,
     updateWindow,
     updateOutlet,
     updatePath,
+    updateLabel,
     moveObjectToLayer,
     deleteSelected,
   } = floorPlan;
@@ -445,6 +447,36 @@ export function PropertiesPanel({ floorPlan, interaction }: PropertiesPanelProps
 
         <button type="button" className="danger-button" onClick={deleteSelected}>
           동선 삭제
+        </button>
+      </>
+    );
+  }
+
+  if (selectedLabel) {
+    return (
+      <>
+        <div className="side-panel-title">텍스트 속성</div>
+
+        <div className="field-row">
+          <label htmlFor="label-text">내용</label>
+          <input
+            id="label-text"
+            type="text"
+            value={selectedLabel.text}
+            onChange={(e) => updateLabel(selectedLabel.id, { text: e.target.value })}
+          />
+        </div>
+
+        <LayerField
+          kind="label"
+          objectId={selectedLabel.id}
+          layerId={selectedLabel.layerId}
+          layers={layers}
+          moveObjectToLayer={moveObjectToLayer}
+        />
+
+        <button type="button" className="danger-button" onClick={deleteSelected}>
+          텍스트 삭제
         </button>
       </>
     );
