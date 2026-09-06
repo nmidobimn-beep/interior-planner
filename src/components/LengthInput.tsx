@@ -5,7 +5,8 @@ interface LengthInputProps {
   id: string;
   valueMm: number;
   unit: DisplayUnit;
-  minMm: number;
+  /** 생략하면 최솟값 제한 없음(사용자가 원하는 만큼 작은 값도 입력 가능). */
+  minMm?: number;
   maxMm: number;
   onChangeMm: (mm: number) => void;
 }
@@ -21,12 +22,13 @@ export function LengthInput({ id, valueMm, unit, minMm, maxMm, onChangeMm }: Len
     <NumberInput
       id={id}
       value={mmToDisplay(valueMm, unit)}
-      min={mmToDisplay(minMm, unit)}
+      min={minMm !== undefined ? mmToDisplay(minMm, unit) : undefined}
       max={mmToDisplay(maxMm, unit)}
       step={displayStep(unit)}
       onCommit={(displayValue) => {
         const mm = displayToMm(displayValue, unit);
-        onChangeMm(Math.min(maxMm, Math.max(minMm, mm)));
+        const clamped = minMm !== undefined ? Math.max(minMm, mm) : mm;
+        onChangeMm(Math.min(maxMm, clamped));
       }}
     />
   );

@@ -1,13 +1,4 @@
-import {
-  MAX_FURNITURE_SIZE_MM,
-  MAX_OUTLET_COUNT,
-  MAX_WALL_THICKNESS_MM,
-  MIN_FURNITURE_SIZE_MM,
-  MIN_OPENING_WIDTH_MM,
-  MIN_OUTLET_COUNT,
-  MIN_WALL_LENGTH_MM,
-  MIN_WALL_THICKNESS_MM,
-} from '../config/constants';
+import { MAX_FURNITURE_SIZE_MM, MAX_OUTLET_COUNT, MAX_WALL_THICKNESS_MM, MIN_FURNITURE_SIZE_MM } from '../config/constants';
 import { clampOpeningOffset } from '../core/openingGeometry';
 import { defaultControlPoint } from '../core/pathGeometry';
 import { endPointForLength, wallLengthMm } from '../core/wallGeometry';
@@ -118,7 +109,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
             id="wall-length"
             valueMm={lengthMm}
             unit={unit}
-            minMm={MIN_WALL_LENGTH_MM}
             maxMm={Number.MAX_SAFE_INTEGER}
             onChangeMm={(mm) => updateWall(selectedWall.id, { end: endPointForLength(selectedWall, mm) })}
           />
@@ -130,7 +120,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
             id="wall-thickness"
             valueMm={selectedWall.thicknessMm}
             unit={unit}
-            minMm={MIN_WALL_THICKNESS_MM}
             maxMm={MAX_WALL_THICKNESS_MM}
             onChangeMm={(mm) => updateWall(selectedWall.id, { thicknessMm: mm })}
           />
@@ -169,7 +158,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
               id="furniture-diameter"
               valueMm={item.width}
               unit={unit}
-              minMm={MIN_FURNITURE_SIZE_MM}
               maxMm={MAX_FURNITURE_SIZE_MM}
               onChangeMm={(mm) => updateFurniture(item.id, { width: mm, height: mm })}
             />
@@ -182,8 +170,7 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
                 id="furniture-width"
                 valueMm={item.width}
                 unit={unit}
-                minMm={MIN_FURNITURE_SIZE_MM}
-                maxMm={MAX_FURNITURE_SIZE_MM}
+                  maxMm={MAX_FURNITURE_SIZE_MM}
                 onChangeMm={(mm) => updateFurniture(item.id, { width: mm })}
               />
             </div>
@@ -193,8 +180,7 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
                 id="furniture-height"
                 valueMm={item.height}
                 unit={unit}
-                minMm={MIN_FURNITURE_SIZE_MM}
-                maxMm={MAX_FURNITURE_SIZE_MM}
+                  maxMm={MAX_FURNITURE_SIZE_MM}
                 onChangeMm={(mm) => updateFurniture(item.id, { height: mm })}
               />
             </div>
@@ -208,7 +194,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
               id="furniture-arm"
               valueMm={item.armThicknessMm ?? MIN_FURNITURE_SIZE_MM}
               unit={unit}
-              minMm={MIN_FURNITURE_SIZE_MM}
               maxMm={Math.min(item.width, item.height)}
               onChangeMm={(mm) => updateFurniture(item.id, { armThicknessMm: mm })}
             />
@@ -276,7 +261,7 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
 
     const changeWidth = (newWidthRaw: number) => {
       if (!wall) return;
-      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, newWidthRaw));
+      const newWidth = Math.min(wallLength, newWidthRaw);
       const centerOffset = selectedDoor.offsetMm + selectedDoor.widthMm / 2;
       const newOffset = clampOpeningOffset(centerOffset - newWidth / 2, newWidth, wallLength);
       updateDoor(selectedDoor.id, { widthMm: newWidth, offsetMm: newOffset });
@@ -292,7 +277,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
             id="door-width"
             valueMm={selectedDoor.widthMm}
             unit={unit}
-            minMm={MIN_OPENING_WIDTH_MM}
             maxMm={wallLength}
             onChangeMm={changeWidth}
           />
@@ -343,7 +327,7 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
 
     const changeWidth = (newWidthRaw: number) => {
       if (!wall) return;
-      const newWidth = Math.min(wallLength, Math.max(MIN_OPENING_WIDTH_MM, newWidthRaw));
+      const newWidth = Math.min(wallLength, newWidthRaw);
       const centerOffset = selectedWindow.offsetMm + selectedWindow.widthMm / 2;
       const newOffset = clampOpeningOffset(centerOffset - newWidth / 2, newWidth, wallLength);
       updateWindow(selectedWindow.id, { widthMm: newWidth, offsetMm: newOffset });
@@ -359,7 +343,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
             id="window-width"
             valueMm={selectedWindow.widthMm}
             unit={unit}
-            minMm={MIN_OPENING_WIDTH_MM}
             maxMm={wallLength}
             onChangeMm={changeWidth}
           />
@@ -399,7 +382,6 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
           <label htmlFor="outlet-count">개수</label>
           <NumberInput
             id="outlet-count"
-            min={MIN_OUTLET_COUNT}
             max={MAX_OUTLET_COUNT}
             value={selectedOutlet.count}
             onCommit={(value) => updateOutlet(selectedOutlet.id, { count: value })}

@@ -53,7 +53,12 @@ export function panBy(viewport: Viewport, dx: number, dy: number): Viewport {
   };
 }
 
-/** 주어진 실제 영역(mm)이 캔버스 안에 여백을 두고 꽉 차도록 뷰포트를 계산한다. */
+/**
+ * 주어진 실제 영역(mm)이 캔버스 안에 여백을 두고 꽉 차도록 뷰포트를 계산한다.
+ * 일반 확대/축소(마우스 휠, +/- 버튼)와 달리 아래쪽 배율 제한(MIN_SCALE)은 적용하지 않는다 —
+ * 전체보기는 도면이 아무리 커도 전부 화면 안에 들어와야 하므로, 필요하면 MIN_SCALE보다도
+ * 더 축소한다(위쪽 제한 MAX_SCALE만 유지 — 아주 작은 도면을 과도하게 확대하지 않기 위함).
+ */
 export function fitBounds(bounds: Bounds, canvasSize: Size, paddingPx: number = FIT_PADDING_PX): Viewport {
   const worldWidth = Math.max(1, bounds.maxX - bounds.minX);
   const worldHeight = Math.max(1, bounds.maxY - bounds.minY);
@@ -61,7 +66,7 @@ export function fitBounds(bounds: Bounds, canvasSize: Size, paddingPx: number = 
   const availableWidth = Math.max(1, canvasSize.width - paddingPx * 2);
   const availableHeight = Math.max(1, canvasSize.height - paddingPx * 2);
 
-  const scale = clampScale(Math.min(availableWidth / worldWidth, availableHeight / worldHeight));
+  const scale = Math.min(MAX_SCALE, availableWidth / worldWidth, availableHeight / worldHeight);
 
   const worldCenter: Point = {
     x: (bounds.minX + bounds.maxX) / 2,

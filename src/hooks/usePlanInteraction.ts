@@ -129,7 +129,9 @@ function snapLengthAlong(origin: Point, point: Point, unitMm: number): Point {
   const dx = point.x - origin.x;
   const dy = point.y - origin.y;
   const dist = Math.hypot(dx, dy);
-  if (dist === 0) return point;
+  // 길이 스냅 단위 입력창에 최솟값 제한이 없어 0 이하 값도 넣을 수 있다 — 그 경우 나눗셈이
+  // NaN/Infinity가 되지 않도록 길이 스냅을 건너뛴다(자유 길이 그대로 유지).
+  if (dist === 0 || unitMm <= 0) return point;
 
   const snappedDist = Math.round(dist / unitMm) * unitMm;
   const scale = snappedDist / dist;

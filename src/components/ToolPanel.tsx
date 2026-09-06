@@ -1,4 +1,4 @@
-import { MAX_WALL_LENGTH_SNAP_MM, MAX_WALL_THICKNESS_MM, MIN_WALL_LENGTH_SNAP_MM, MIN_WALL_THICKNESS_MM } from '../config/constants';
+import { MAX_WALL_LENGTH_SNAP_MM, MAX_WALL_THICKNESS_MM } from '../config/constants';
 import type { ToolId, UsePlanInteractionResult } from '../hooks/usePlanInteraction';
 import { LengthInput } from './LengthInput';
 
@@ -89,7 +89,6 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
               id="default-wall-thickness"
               valueMm={defaultWallThicknessMm}
               unit={displayUnit}
-              minMm={MIN_WALL_THICKNESS_MM}
               maxMm={MAX_WALL_THICKNESS_MM}
               onChangeMm={setDefaultWallThicknessMm}
             />
@@ -101,7 +100,6 @@ export function ToolPanel({ interaction }: ToolPanelProps) {
               id="wall-length-snap"
               valueMm={wallLengthSnapMm}
               unit={displayUnit}
-              minMm={MIN_WALL_LENGTH_SNAP_MM}
               maxMm={MAX_WALL_LENGTH_SNAP_MM}
               onChangeMm={setWallLengthSnapMm}
             />
