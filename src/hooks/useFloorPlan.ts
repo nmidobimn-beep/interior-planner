@@ -359,6 +359,12 @@ export function useFloorPlan() {
     () => new Set(state.selection.filter((s) => s.kind === 'dimension').map((s) => s.id)),
     [state.selection],
   );
+  // BL로 모서리를 이어붙인 벽 그룹은 하나를 클릭해도 여러 개가 함께 선택되므로(state.selection에
+  // wall 항목이 2개 이상 들어감), 다른 다중 선택 대상들처럼 Set으로도 노출한다.
+  const selectedWallIds = useMemo(
+    () => new Set(state.selection.filter((s) => s.kind === 'wall').map((s) => s.id)),
+    [state.selection],
+  );
 
   const copySelected = useCallback(() => {
     if (selectedWall) setClipboard({ kind: 'wall', data: selectedWall });
@@ -649,6 +655,7 @@ export function useFloorPlan() {
     selectedLabelIds,
     selectedPolygonIds,
     selectedDimensionIds,
+    selectedWallIds,
     canCopy: selectedObject !== null,
     canPaste: clipboard !== null,
     copySelected,

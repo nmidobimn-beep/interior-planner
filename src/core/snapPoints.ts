@@ -40,6 +40,7 @@ export interface SnapExclude {
   labelIds?: string[];
   polygonIds?: string[];
   dimensionIds?: string[];
+  wallIds?: string[];
 }
 
 /**
@@ -59,7 +60,7 @@ export function collectSnapCandidates(
 
   if (categories.endpoint) {
     for (const wall of walls) {
-      if (wall.id === exclude.wallId) continue;
+      if (wall.id === exclude.wallId || exclude.wallIds?.includes(wall.id)) continue;
       points.push(...wallKeyPoints(wall));
     }
     for (const door of doors) {

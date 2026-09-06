@@ -10,23 +10,33 @@ const JOIN_EPSILON_MM = 2;
 /** 이 각도(도) 이내면 "일직선"으로 본다(같은 런으로 묶어 하나의 벽으로 병합). */
 const COLLINEAR_ANGLE_TOLERANCE_DEG = 1.5;
 
+/** 기존 벽(삭제되지 않는)에 적용할 patch — 모서리 정리(끝점)와 병합 그룹 배정을 함께 담는다. */
+export interface WallPatch {
+  id: string;
+  start?: Point;
+  end?: Point;
+  mergeGroupId?: string;
+}
+
 /**
  * 병합 결과. 일직선으로 이어진 구간은 벽 하나(newWalls)로 합쳐지고, 꺾이는 지점(모서리)은
- * 벽 개수를 줄이지 않는 대신 두 벽이 정확히 같은 점에서 만나도록 끝점만 정리한다
- * (wallPointPatches). 문/창문은 실제로 다른 벽으로 대체된 경우에만 재배치된다.
+ * 벽 개수를 줄이지 않는 대신 (1) 두 벽이 정확히 같은 점에서 만나도록 끝점을 정리하고
+ * (2) 같은 mergeGroupId를 부여해 하나를 클릭·이동해도 그룹 전체가 함께 선택·이동하게 한다.
+ * 문/창문은 실제로 다른 벽으로 대체된 경우에만 재배치된다.
  */
 export interface WallMergePayload {
   /** 일직선 구간 병합으로 완전히 대체되어 사라지는 원래 벽들. */
   removedWallIds: string[];
-  /** 일직선 구간마다 새로 만들어진 병합 벽(구간 하나당 1개). */
+  /** 일직선 구간마다 새로 만들어진 병합 벽(구간 하나당 1개) — mergeGroupId가 필요하면 이미 포함됨. */
   newWalls: Wall[];
-  /** 모서리에서 살짝 어긋나 있던 끝점을 정확히 맞추기 위한, 기존 벽 유지 + 끝점만 수정. */
-  wallPointPatches: { id: string; start?: Point; end?: Point }[];
+  /** 살아남는 기존 벽에 적용할 끝점/병합 그룹 patch. */
+  wallPatches: WallPatch[];
   doorPatches: { id: string; wallId: string; offsetMm: number }[];
   windowPatches: { id: string; wallId: string; offsetMm: number }[];
-  /** 결과를 바로 확인할 수 있도록 선택해줄 벽 id들(새 병합 벽 + 모서리 정리 후 남은 벽). */
+  /** 결과를 바로 확인할 수 있도록 선택해줄 벽 id들(새 병합 벽 + 모서리에서 이어진 벽들). */
   resultWallIds: string[];
   mergedRunCount: number;
+  /** 실제로 끝점이 조정된 모서리 수(이미 정확히 맞물려 있던 경우는 포함하지 않음). */
   joinedCornerCount: number;
 }
 
@@ -162,13 +172,33 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
   }
 
   const runs = splitIntoRuns(chain);
+  // 구간이 2개 이상이면(=꺾이는 지점이 하나 이상 있으면) 이 사슬 전체가 하나의 병합 그룹이 된다.
+  // 이미 이 사슬의 벽 일부가 그룹에 속해 있다면(예: 이전에 BL로 이어붙인 벽을 다시 선택) 그
+  // 기존 id를 그대로 재사용해 그룹이 계속 이어지게 한다 — 서로 다른 기존 그룹이 섞여 있으면
+  // 새 id로 통일한다.
+  let groupId: string | null = null;
+  if (runs.length > 1) {
+    const existingGroupIds = new Set(
+      runs.filter((run) => run.length === 1).map((run) => run[0].wall.mergeGroupId).filter((id): id is string => !!id),
+    );
+    groupId = existingGroupIds.size === 1 ? [...existingGroupIds][0] : createId();
+  }
 
   const removedWallIds: string[] = [];
   const newWalls: Wall[] = [];
-  const wallPointPatches: { id: string; start?: Point; end?: Point }[] = [];
+  const wallPatchById = new Map<string, WallPatch>();
   const doorPatches: { id: string; wallId: string; offsetMm: number }[] = [];
   const windowPatches: { id: string; wallId: string; offsetMm: number }[] = [];
   const resultWallIds: string[] = [];
+
+  const patchFor = (id: string): WallPatch => {
+    let patch = wallPatchById.get(id);
+    if (!patch) {
+      patch = { id };
+      wallPatchById.set(id, patch);
+    }
+    return patch;
+  };
 
   // 각 구간을 처리한 결과, 그 구간의 최종 시작/끝점(모서리 정리에 쓰임)과 대표 벽 id를 기록한다.
   interface RunOutcome {
@@ -186,6 +216,7 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
 
     if (run.length === 1) {
       const link = run[0];
+      if (groupId && link.wall.mergeGroupId !== groupId) patchFor(link.wall.id).mergeGroupId = groupId;
       return {
         startPoint,
         endPoint,
@@ -199,6 +230,7 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
     const thicknessMm = Math.max(...runWalls.map((w) => w.thicknessMm));
     const layerId = run[0].wall.layerId;
     const newWall: Wall = { id: createId(), start: startPoint, end: endPoint, thicknessMm, layerId };
+    if (groupId) newWall.mergeGroupId = groupId;
     const mergedDir = wallDirectionUnit(newWall);
     const offsetOnNewWall = (worldPt: Point) => (worldPt.x - newWall.start.x) * mergedDir.x + (worldPt.y - newWall.start.y) * mergedDir.y;
 
@@ -229,10 +261,9 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
 
     joinedCornerCount++;
     if (current.singleWall) {
-      const patch: (typeof wallPointPatches)[number] = { id: current.singleWall.id };
+      const patch = patchFor(current.singleWall.id);
       if (current.singleWall.reversed) patch.start = corner;
       else patch.end = corner;
-      wallPointPatches.push(patch);
     } else {
       const w = newWalls.find((nw) => nw.id === current.representativeWallId)!;
       w.end = corner;
@@ -240,10 +271,9 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
     current.endPoint = corner;
 
     if (next.singleWall) {
-      const patch: (typeof wallPointPatches)[number] = { id: next.singleWall.id };
+      const patch = patchFor(next.singleWall.id);
       if (next.singleWall.reversed) patch.end = corner;
       else patch.start = corner;
-      wallPointPatches.push(patch);
     } else {
       const w = newWalls.find((nw) => nw.id === next.representativeWallId)!;
       w.start = corner;
@@ -251,9 +281,10 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
     next.startPoint = corner;
   }
 
-  // 모든 구간이 이미 벽 1개씩이고 끝점도 이미 정확히 일치하는 경우(newWalls·wallPointPatches
-  // 둘 다 비어있음)에도 실패로 취급하지 않는다 — "이미 모서리가 깔끔하게 맞물려 있다"는 성공으로
-  // 보고하고, 호출 쪽에서 바꿀 데이터가 없으면 Undo 기록 없이 안내만 하면 된다.
+  // 모든 구간이 이미 벽 1개씩이고, 끝점도 이미 정확히 일치하고, 이미 같은 그룹이라 patch할 것이
+  // 없는 경우에도 실패로 취급하지 않는다 — "이미 모서리가 깔끔하게 맞물려 있다"는 성공으로 보고
+  // 하고, 호출 쪽에서 바꿀 데이터가 없으면 Undo 기록 없이 안내만 하면 된다.
+  const wallPatches = [...wallPatchById.values()];
 
   for (const w of newWalls) {
     if (distance(w.start, w.end) < MIN_WALL_LENGTH_MM) {
@@ -266,7 +297,7 @@ export function planWallMerge(selectedWalls: Wall[], doors: Door[], windows: Win
     payload: {
       removedWallIds,
       newWalls,
-      wallPointPatches,
+      wallPatches,
       doorPatches,
       windowPatches,
       resultWallIds,

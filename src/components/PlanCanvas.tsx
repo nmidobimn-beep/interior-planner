@@ -45,7 +45,6 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     visibleLabels: labels,
     visiblePolygons: polygons,
     visibleDimensions: dimensions,
-    selectedWall,
     selectedFurniture,
     selectedDoor,
     selectedWindow,
@@ -61,6 +60,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     selectedLabelIds,
     selectedPolygonIds,
     selectedDimensionIds,
+    selectedWallIds,
   } = floorPlan;
   const {
     activeTool,
@@ -121,7 +121,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     drawGrid(ctx, viewport, size);
     if (showDemo) drawDemoScene(ctx, viewport);
 
-    drawWalls(ctx, viewport, walls, selectedWall?.id ?? null);
+    drawWalls(ctx, viewport, walls, selectedWallIds);
     drawDoors(ctx, viewport, doors, walls, selectedDoor?.id ?? null);
     drawWindows(ctx, viewport, windows, walls, selectedWindow?.id ?? null);
     drawFurniture(ctx, viewport, furniture, selectedFurnitureIds);
@@ -188,7 +188,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     labels,
     polygons,
     dimensions,
-    selectedWall,
+    selectedWallIds,
     selectedFurniture,
     selectedDoor,
     selectedWindow,

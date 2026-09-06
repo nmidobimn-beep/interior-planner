@@ -16,9 +16,9 @@ function toScreenPath(ctx: CanvasRenderingContext2D, viewport: Viewport, corners
   ctx.closePath();
 }
 
-export function drawWalls(ctx: CanvasRenderingContext2D, viewport: Viewport, walls: Wall[], selectedWallId: string | null) {
+export function drawWalls(ctx: CanvasRenderingContext2D, viewport: Viewport, walls: Wall[], selectedIds: ReadonlySet<string>) {
   for (const wall of walls) {
-    const isSelected = wall.id === selectedWallId;
+    const isSelected = selectedIds.has(wall.id);
     toScreenPath(ctx, viewport, wallCorners(wall));
     ctx.fillStyle = isSelected ? COLORS.wallSelectedFill : COLORS.wallFill;
     ctx.strokeStyle = isSelected ? COLORS.wallSelectedStroke : COLORS.wallStroke;
@@ -27,8 +27,12 @@ export function drawWalls(ctx: CanvasRenderingContext2D, viewport: Viewport, wal
     ctx.stroke();
   }
 
-  const selected = walls.find((w) => w.id === selectedWallId);
-  if (selected) drawEndpointHandles(ctx, viewport, selected);
+  // 끝점 손잡이는 벽 하나만 선택됐을 때만 보여준다(BL로 이어붙인 벽 그룹처럼 여러 개가 선택된
+  // 경우는 개별 끝점을 드래그하는 게 아니라 그룹 전체를 이동하는 것이므로 손잡이가 필요 없다).
+  if (selectedIds.size === 1) {
+    const selected = walls.find((w) => selectedIds.has(w.id));
+    if (selected) drawEndpointHandles(ctx, viewport, selected);
+  }
 }
 
 function drawEndpointHandles(ctx: CanvasRenderingContext2D, viewport: Viewport, wall: Wall) {

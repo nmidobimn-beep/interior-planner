@@ -367,12 +367,13 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
 
     case 'MERGE_WALLS': {
       // BL 명령: 일직선 구간은 벽 하나로 합치고(newWalls), 꺾이는 지점(모서리)은 벽 개수를
-      // 줄이지 않는 대신 끝점만 정확히 맞춘다(wallPointPatches). 문/창문은 실제로 다른 벽으로
-      // 대체된 경우에만 그 벽으로 옮겨지며 offsetMm도 다시 계산된 값으로 갱신된다(월드 상의
-      // 실제 위치는 그대로 유지). 한 번의 액션이라 Undo 한 번으로 전체 복원된다.
-      const { removedWallIds, newWalls, wallPointPatches, doorPatches, windowPatches, resultWallIds } = action.payload;
+      // 줄이지 않는 대신 (1) 끝점을 정확히 맞추고 (2) 같은 mergeGroupId를 부여해 하나를
+      // 클릭·이동해도 그룹 전체가 함께 선택·이동하게 한다(wallPatches). 문/창문은 실제로 다른
+      // 벽으로 대체된 경우에만 그 벽으로 옮겨지며 offsetMm도 다시 계산된 값으로 갱신된다(월드
+      // 상의 실제 위치는 그대로 유지). 한 번의 액션이라 Undo 한 번으로 전체 복원된다.
+      const { removedWallIds, newWalls, wallPatches, doorPatches, windowPatches, resultWallIds } = action.payload;
       const removedSet = new Set(removedWallIds);
-      const pointPatchById = new Map(wallPointPatches.map((p) => [p.id, p]));
+      const wallPatchById = new Map(wallPatches.map((p) => [p.id, p]));
       const doorPatchById = new Map(doorPatches.map((p) => [p.id, p]));
       const windowPatchById = new Map(windowPatches.map((p) => [p.id, p]));
 
@@ -382,8 +383,14 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
           ...state.walls
             .filter((w) => !removedSet.has(w.id))
             .map((w) => {
-              const patch = pointPatchById.get(w.id);
-              return patch ? { ...w, ...(patch.start ? { start: patch.start } : {}), ...(patch.end ? { end: patch.end } : {}) } : w;
+              const patch = wallPatchById.get(w.id);
+              if (!patch) return w;
+              return {
+                ...w,
+                ...(patch.start ? { start: patch.start } : {}),
+                ...(patch.end ? { end: patch.end } : {}),
+                ...(patch.mergeGroupId ? { mergeGroupId: patch.mergeGroupId } : {}),
+              };
             }),
           ...newWalls,
         ],

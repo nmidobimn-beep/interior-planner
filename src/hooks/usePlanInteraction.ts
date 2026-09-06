@@ -81,7 +81,8 @@ type SelectionMemberSnapshot =
   | { kind: 'label'; id: string; x: number; y: number }
   | { kind: 'path'; id: string; start: Point; end: Point; controlPoint?: Point }
   | { kind: 'polygon'; id: string; points: Point[] }
-  | { kind: 'dimension'; id: string; start: Point; end: Point };
+  | { kind: 'dimension'; id: string; start: Point; end: Point }
+  | { kind: 'wall'; id: string; start: Point; end: Point };
 
 type DragState =
   | { type: 'pan'; lastClient: Point }
@@ -102,7 +103,16 @@ type DragState =
   | { type: 'polygonVertexDrag'; polygonId: string; vertexIndex: number; original: Point }
   | { type: 'moveDimension'; dimensionId: string; original: DimensionLine; grabWorld: Point }
   | { type: 'dimensionEndpointDrag'; dimensionId: string; key: PathEndpointKey; original: Point }
-  | { type: 'moveSelection'; members: SelectionMemberSnapshot[]; initialBounds: Bounds | null; grabWorld: Point; clickedItem: SelectionItem }
+  | {
+      type: 'moveSelection';
+      members: SelectionMemberSnapshot[];
+      initialBounds: Bounds | null;
+      grabWorld: Point;
+      clickedItem: SelectionItem;
+      /** BL로 이어붙인 벽 그룹처럼 "항상 함께 움직이는" 고정 그룹이면 true — 드래그 없이
+       * 클릭만 했을 때도 그룹 선택을 유지한다(다른 다중 선택처럼 클릭한 객체 하나로 접지 않음). */
+      isPermanentGroup?: boolean;
+    }
   | { type: 'rotateSelection'; members: SelectionMemberSnapshot[]; pivot: Point; startAngleDeg: number };
 
 interface UsePlanInteractionArgs {
@@ -318,11 +328,14 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         } else if (item.kind === 'dimension') {
           const d = dimensions.find((x) => x.id === item.id);
           if (d) result.push({ kind: 'dimension', id: d.id, start: d.start, end: d.end });
+        } else if (item.kind === 'wall') {
+          const w = walls.find((x) => x.id === item.id);
+          if (w) result.push({ kind: 'wall', id: w.id, start: w.start, end: w.end });
         }
       }
       return result;
     },
-    [furniture, outlets, labels, paths, polygons, dimensions],
+    [furniture, outlets, labels, paths, polygons, dimensions, walls],
   );
 
   const memberIdsByKind = useCallback((members: SelectionMemberSnapshot[], kind: ObjectKind) => {
@@ -337,19 +350,28 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       else if (item.kind === 'label') selectLabel(item.id);
       else if (item.kind === 'polygon') selectPolygon(item.id);
       else if (item.kind === 'dimension') selectDimension(item.id);
+      else if (item.kind === 'wall') selectWall(item.id);
     },
-    [selectFurniture, selectLabel, selectOutlet, selectPath, selectPolygon, selectDimension],
+    [selectFurniture, selectLabel, selectOutlet, selectPath, selectPolygon, selectDimension, selectWall],
   );
 
   const startMoveSelection = useCallback(
-    (worldRaw: Point, currentTarget: HTMLCanvasElement, pointerId: number, clickedItem: SelectionItem) => {
-      const members = buildSelectionSnapshot(selection);
+    (
+      worldRaw: Point,
+      currentTarget: HTMLCanvasElement,
+      pointerId: number,
+      clickedItem: SelectionItem,
+      itemsOverride?: SelectionItem[],
+      isPermanentGroup = false,
+    ) => {
+      const items = itemsOverride ?? selection;
+      const members = buildSelectionSnapshot(items);
       if (members.length === 0) return false;
       // 실제(회전 반영) 바운딩 박스를 드래그 시작 시점에 한 번만 계산해둔다 — 평행 이동이므로
       // 드래그 도중에는 이 박스를 delta만큼 그대로 옮기면 된다(재계산 불필요).
-      const initialBounds = computeSelectionBounds(selection, { furniture, outlets, paths, labels, polygons, dimensions });
+      const initialBounds = computeSelectionBounds(items, { furniture, outlets, paths, labels, polygons, dimensions });
       beginTransientEdit();
-      dragState.current = { type: 'moveSelection', members, initialBounds, grabWorld: worldRaw, clickedItem };
+      dragState.current = { type: 'moveSelection', members, initialBounds, grabWorld: worldRaw, clickedItem, isPermanentGroup };
       currentTarget.setPointerCapture(pointerId);
       return true;
     },
@@ -765,6 +787,14 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
       const hitWall = hitTestWalls(worldRaw, walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
       if (hitWall) {
+        // BL(벽 합치기)로 모서리를 이어붙인 벽은 mergeGroupId를 공유한다 — 그중 하나를 클릭해도
+        // 그룹 전체가 선택되고, 항상 그룹 전체가 함께 이동해 모서리가 다시 벌어지지 않는다.
+        const group = hitWall.mergeGroupId ? walls.filter((w) => w.mergeGroupId === hitWall.mergeGroupId) : [hitWall];
+        if (group.length > 1) {
+          const items: SelectionItem[] = group.map((w) => ({ kind: 'wall', id: w.id }));
+          setSelection(items);
+          if (startMoveSelection(worldRaw, e.currentTarget, e.pointerId, { kind: 'wall', id: hitWall.id }, items, true)) return;
+        }
         selectWall(hitWall.id);
         beginTransientEdit();
         dragState.current = { type: 'moveWall', wallId: hitWall.id, original: hitWall, grabWorld: worldRaw };
@@ -822,6 +852,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       selection,
       selectionCount,
       setActiveTool,
+      setSelection,
       snapCandidates,
       snapEnabled,
       startMoveSelection,
@@ -1070,6 +1101,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           labelIds: memberIdsByKind(drag.members, 'label'),
           polygonIds: memberIdsByKind(drag.members, 'polygon'),
           dimensionIds: memberIdsByKind(drag.members, 'dimension'),
+          wallIds: memberIdsByKind(drag.members, 'wall'),
         });
         let finalDelta = rawDelta;
         let snapKind: SnapKind = null;
@@ -1105,6 +1137,15 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
             updatePolygon(member.id, { points: member.points.map((p) => ({ x: p.x + finalDelta.x, y: p.y + finalDelta.y })) }, true);
           } else if (member.kind === 'dimension') {
             updateDimension(
+              member.id,
+              {
+                start: { x: member.start.x + finalDelta.x, y: member.start.y + finalDelta.y },
+                end: { x: member.end.x + finalDelta.x, y: member.end.y + finalDelta.y },
+              },
+              true,
+            );
+          } else if (member.kind === 'wall') {
+            updateWall(
               member.id,
               {
                 start: { x: member.start.x + finalDelta.x, y: member.start.y + finalDelta.y },
@@ -1152,6 +1193,12 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
                 start: rotatePointAround(member.start, drag.pivot, deltaDeg),
                 end: rotatePointAround(member.end, drag.pivot, deltaDeg),
               },
+              true,
+            );
+          } else if (member.kind === 'wall') {
+            updateWall(
+              member.id,
+              { start: rotatePointAround(member.start, drag.pivot, deltaDeg), end: rotatePointAround(member.end, drag.pivot, deltaDeg) },
               true,
             );
           }
@@ -1298,6 +1345,9 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
             } else if (member.kind === 'dimension') {
               const current = dimensions.find((d) => d.id === member.id);
               if (current && (!pointsEqual(current.start, member.start) || !pointsEqual(current.end, member.end))) return true;
+            } else if (member.kind === 'wall') {
+              const current = walls.find((w) => w.id === member.id);
+              if (current && (!pointsEqual(current.start, member.start) || !pointsEqual(current.end, member.end))) return true;
             }
           }
           return false;
@@ -1339,8 +1389,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           } else {
             discardTransientEdit();
             // moveSelection이 실제로는 움직이지 않은(=드래그가 아니라 그냥 클릭이었던) 경우,
-            // 흔한 관례대로 클릭한 객체 하나만 선택되도록 되돌린다(그룹 선택 유지 안 함).
-            if (drag.type === 'moveSelection') selectSingleItem(drag.clickedItem);
+            // 흔한 관례대로 클릭한 객체 하나만 선택되도록 되돌린다(그룹 선택 유지 안 함) — 단,
+            // BL로 이어붙인 벽 그룹처럼 "항상 함께 움직이는" 고정 그룹은 예외로, 클릭만 해도
+            // 그룹 전체가 선택된 채로 유지된다(모서리를 이룬 벽들이 하나처럼 느껴지도록).
+            if (drag.type === 'moveSelection' && !drag.isPermanentGroup) selectSingleItem(drag.clickedItem);
           }
         }
         dragState.current = null;
