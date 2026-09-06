@@ -2,8 +2,11 @@ import type { Point } from '../types/geometry';
 import type { DimensionLine, DimensionMode } from '../types/dimension';
 import { COLORS, DIMENSION_ENDPOINT_HANDLE_RADIUS_PX, DIMENSION_TICK_LENGTH_PX } from '../config/constants';
 import { worldToScreen, type Viewport } from './viewport';
-import { computeDimensionGeometry } from './dimensionGeometry';
+import { computeDimensionGeometry, dimensionLabelPosition } from './dimensionGeometry';
 import { formatLengthMm, type DisplayUnit } from './units';
+
+/** 라벨이 기본 위치에서 이 정도(px) 이상 떨어져 있어야 "옮겨졌다"고 보고 안내선을 그린다. */
+const LABEL_LEADER_THRESHOLD_PX = 3;
 
 /** 치수선 양 끝에 그리는 작은 사선 눈금(건축 도면에서 흔히 쓰는 방식) — screen 좌표 기준. */
 function drawTick(ctx: CanvasRenderingContext2D, at: Point, dirX: number, dirY: number) {
@@ -62,8 +65,24 @@ export function drawDimensions(
     drawTick(ctx, lineStart, dx / len, dy / len);
     drawTick(ctx, lineEnd, dx / len, dy / len);
 
-    // 거리 라벨
-    const labelScreen = worldToScreen(viewport, geo.labelPosition);
+    // 거리 라벨 — 사용자가 드래그로 옮겨뒀으면(labelOffset) 그 위치에 그린다(측정 대상
+    // 점과는 무관). 기본 위치에서 눈에 띄게 벗어나 있으면 어디서 온 라벨인지 알 수 있도록
+    // 가는 안내선(leader)을 기본 위치까지 이어 그린다.
+    const naturalLabelScreen = worldToScreen(viewport, geo.labelPosition);
+    const labelScreen = worldToScreen(viewport, dimensionLabelPosition(dim));
+    const labelMovedFar = Math.hypot(labelScreen.x - naturalLabelScreen.x, labelScreen.y - naturalLabelScreen.y) > LABEL_LEADER_THRESHOLD_PX;
+
+    if (labelMovedFar) {
+      ctx.strokeStyle = COLORS.dimensionExtensionLine;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(naturalLabelScreen.x, naturalLabelScreen.y);
+      ctx.lineTo(labelScreen.x, labelScreen.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     ctx.font = '600 12px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

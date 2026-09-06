@@ -464,9 +464,15 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
           case 'dimension': {
             const dim = floorPlan.dimensions.find((x) => x.id === item.id);
             if (dim) {
+              // 라벨 오프셋은 측정 대상 점과 무관한 상대 방향 벡터라, 원점 기준으로 같은
+              // 각도만큼 함께 돌려야 라벨이 도형에 붙어있는 것처럼 자연스럽게 움직인다.
               floorPlan.updateDimension(
                 dim.id,
-                { start: rotatePointAround(dim.start, pivot, deltaDeg), end: rotatePointAround(dim.end, pivot, deltaDeg) },
+                {
+                  start: rotatePointAround(dim.start, pivot, deltaDeg),
+                  end: rotatePointAround(dim.end, pivot, deltaDeg),
+                  labelOffset: rotatePointAround(dim.labelOffset ?? { x: 0, y: 0 }, { x: 0, y: 0 }, deltaDeg),
+                },
                 true,
               );
             }

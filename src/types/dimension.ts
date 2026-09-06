@@ -18,4 +18,10 @@ export interface DimensionLine {
   mode: DimensionMode;
   memo?: string;
   layerId: string;
+  /**
+   * 숫자(거리) 라벨을 기본 위치에서 얼마나 옮겨뒀는지(mm, world 기준 상대 오프셋).
+   * 없으면 {0,0} — 기본 위치(치수선 중점 등) 그대로. 치수 측정 대상인 start/end에는 전혀
+   * 영향을 주지 않는다 — 라벨은 순수하게 "어디에 표시할지"만 담당한다.
+   */
+  labelOffset?: Point;
 }

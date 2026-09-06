@@ -21,6 +21,7 @@ import {
   CURVE_CONTROL_HANDLE_RADIUS_PX,
   DIMENSION_ENDPOINT_HANDLE_RADIUS_PX,
   DIMENSION_HIT_TOLERANCE_PX,
+  DIMENSION_LABEL_HIT_RADIUS_PX,
   FURNITURE_HANDLE_RADIUS_PX,
   LABEL_HIT_RADIUS_PX,
   MIN_PATH_LENGTH_MM,
@@ -53,7 +54,7 @@ import { clampOpeningOffset, hitTestDoors, hitTestOutlets, hitTestWindows } from
 import { defaultControlPoint, hitTestPaths, pathKeyPoints } from '../core/pathGeometry';
 import { hitTestLabels } from '../core/labelGeometry';
 import { hitTestPolygonVertex, hitTestPolygons, polygonBounds, polygonCentroid, polygonKeyPoints } from '../core/polygonGeometry';
-import { dimensionKeyPoints, hitTestDimensions } from '../core/dimensionGeometry';
+import { dimensionKeyPoints, dimensionLabelPosition, hitTestDimensions } from '../core/dimensionGeometry';
 import { collectSnapCandidates, type SnapExclude } from '../core/snapPoints';
 import { computeSelectionBounds, hitTestBoxSelection, rotatePointAround, selectionKeyPoints } from '../core/multiSelectGeometry';
 import { groupRotationHandleWorldPoint } from '../core/renderSelection';
@@ -81,7 +82,7 @@ type SelectionMemberSnapshot =
   | { kind: 'label'; id: string; x: number; y: number }
   | { kind: 'path'; id: string; start: Point; end: Point; controlPoint?: Point }
   | { kind: 'polygon'; id: string; points: Point[] }
-  | { kind: 'dimension'; id: string; start: Point; end: Point }
+  | { kind: 'dimension'; id: string; start: Point; end: Point; labelOffset: Point }
   | { kind: 'wall'; id: string; start: Point; end: Point };
 
 type DragState =
@@ -103,6 +104,7 @@ type DragState =
   | { type: 'polygonVertexDrag'; polygonId: string; vertexIndex: number; original: Point }
   | { type: 'moveDimension'; dimensionId: string; original: DimensionLine; grabWorld: Point }
   | { type: 'dimensionEndpointDrag'; dimensionId: string; key: PathEndpointKey; original: Point }
+  | { type: 'dimensionLabelDrag'; dimensionId: string; original: Point; grabWorld: Point }
   | {
       type: 'moveSelection';
       members: SelectionMemberSnapshot[];
@@ -329,7 +331,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           if (p) result.push({ kind: 'polygon', id: p.id, points: p.points });
         } else if (item.kind === 'dimension') {
           const d = dimensions.find((x) => x.id === item.id);
-          if (d) result.push({ kind: 'dimension', id: d.id, start: d.start, end: d.end });
+          if (d) result.push({ kind: 'dimension', id: d.id, start: d.start, end: d.end, labelOffset: d.labelOffset ?? { x: 0, y: 0 } });
         } else if (item.kind === 'wall') {
           const w = walls.find((x) => x.id === item.id);
           if (w) result.push({ kind: 'wall', id: w.id, start: w.start, end: w.end });
@@ -693,6 +695,21 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         if (distance(screen, endScreen) <= handleTolerance) {
           beginTransientEdit();
           dragState.current = { type: 'dimensionEndpointDrag', dimensionId: selectedDimension.id, key: 'end', original: selectedDimension.end };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+
+        // 숫자(거리) 라벨 자체를 드래그하면 표시 위치만 옮겨진다 — 측정 대상 점(start/end)은
+        // 그대로 유지된다.
+        const labelScreen = worldToScreen(viewport, dimensionLabelPosition(selectedDimension));
+        if (distance(screen, labelScreen) <= DIMENSION_LABEL_HIT_RADIUS_PX) {
+          beginTransientEdit();
+          dragState.current = {
+            type: 'dimensionLabelDrag',
+            dimensionId: selectedDimension.id,
+            original: selectedDimension.labelOffset ?? { x: 0, y: 0 },
+            grabWorld: worldRaw,
+          };
           e.currentTarget.setPointerCapture(e.pointerId);
           return;
         }
@@ -1181,6 +1198,18 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         return;
       }
 
+      if (drag?.type === 'dimensionLabelDrag') {
+        // 라벨은 순수 표시 위치라 측정 대상 점과 무관하다 — 스냅 없이 마우스를 그대로 따라간다.
+        const delta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
+        updateDimension(
+          drag.dimensionId,
+          { labelOffset: { x: drag.original.x + delta.x, y: drag.original.y + delta.y } },
+          true,
+        );
+        setPreviewSnapKind(null);
+        return;
+      }
+
       if (drag?.type === 'moveSelection') {
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
 
@@ -1262,11 +1291,14 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           } else if (member.kind === 'polygon') {
             updatePolygon(member.id, { points: member.points.map((p) => rotatePointAround(p, drag.pivot, deltaDeg)) }, true);
           } else if (member.kind === 'dimension') {
+            // 라벨 오프셋은 측정 대상 점과 무관한 "상대 방향" 벡터라, 원점 기준으로 같은
+            // 각도만큼 함께 돌려야 라벨이 도형에 붙어있는 것처럼 자연스럽게 움직인다.
             updateDimension(
               member.id,
               {
                 start: rotatePointAround(member.start, drag.pivot, deltaDeg),
                 end: rotatePointAround(member.end, drag.pivot, deltaDeg),
+                labelOffset: rotatePointAround(member.labelOffset, { x: 0, y: 0 }, deltaDeg),
               },
               true,
             );
@@ -1397,6 +1429,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           const current = dimensions.find((d) => d.id === drag.dimensionId);
           return !!current && !pointsEqual(current[drag.key], drag.original);
         }
+        case 'dimensionLabelDrag': {
+          const current = dimensions.find((d) => d.id === drag.dimensionId);
+          return !!current && !pointsEqual(current.labelOffset ?? { x: 0, y: 0 }, drag.original);
+        }
         case 'moveSelection':
         case 'rotateSelection': {
           for (const member of drag.members) {
@@ -1496,6 +1532,9 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       case 'dimensionEndpointDrag':
         updateDimension(drag.dimensionId, drag.key === 'start' ? { start: drag.original } : { end: drag.original }, true);
         break;
+      case 'dimensionLabelDrag':
+        updateDimension(drag.dimensionId, { labelOffset: drag.original }, true);
+        break;
       case 'moveSelection':
       case 'rotateSelection':
         for (const member of drag.members) {
@@ -1510,7 +1549,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           } else if (member.kind === 'polygon') {
             updatePolygon(member.id, { points: member.points }, true);
           } else if (member.kind === 'dimension') {
-            updateDimension(member.id, { start: member.start, end: member.end }, true);
+            updateDimension(member.id, { start: member.start, end: member.end, labelOffset: member.labelOffset }, true);
           } else if (member.kind === 'wall') {
             updateWall(member.id, { start: member.start, end: member.end }, true);
           }

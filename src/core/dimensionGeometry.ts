@@ -83,3 +83,13 @@ export function hitTestDimensions(point: Point, dimensions: DimensionLine[], tol
 export function dimensionKeyPoints(dim: Pick<DimensionLine, 'start' | 'end'>): Point[] {
   return [dim.start, dim.end, { x: (dim.start.x + dim.end.x) / 2, y: (dim.start.y + dim.end.y) / 2 }];
 }
+
+/**
+ * 실제로 화면에 그릴 숫자(거리) 라벨의 위치(mm) — 기본 위치(치수선 중점 등)에 사용자가
+ * 드래그로 옮겨둔 labelOffset을 더한 값이다. 측정 대상 점(start/end)과는 무관하다.
+ */
+export function dimensionLabelPosition(dim: Pick<DimensionLine, 'start' | 'end' | 'mode' | 'labelOffset'>): Point {
+  const geo = computeDimensionGeometry(dim);
+  const offset = dim.labelOffset ?? { x: 0, y: 0 };
+  return { x: geo.labelPosition.x + offset.x, y: geo.labelPosition.y + offset.y };
+}

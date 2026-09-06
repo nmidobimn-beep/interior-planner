@@ -142,6 +142,8 @@ export const DIMENSION_TICK_LENGTH_PX = 6;
 export const DIMENSION_HIT_TOLERANCE_PX = 8;
 /** 치수선 시작/끝점 손잡이의 화면 히트 반지름(px) */
 export const DIMENSION_ENDPOINT_HANDLE_RADIUS_PX = 6;
+/** 숫자(거리) 라벨을 드래그로 옮기기 위한 클릭 허용 반지름(px) — 텍스트 배경 크기를 감안한 값. */
+export const DIMENSION_LABEL_HIT_RADIUS_PX = 22;
 
 /** --- 스냅 대상 종류 (CAD처럼 개별로 켜고 끌 수 있음) --- */
 export interface SnapCategoryFlags {
