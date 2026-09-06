@@ -66,11 +66,46 @@ export function computeDimensionGeometry(dim: Pick<DimensionLine, 'start' | 'end
   };
 }
 
-/** 치수선(보조선 포함)을 클릭으로 선택하기 위한 히트테스트. */
+/**
+ * 사용자가 라벨을 드래그해 labelOffset을 옮겨두면, 숫자만 옮겨지는 게 아니라 치수선(눈금 포함)
+ * 과 라벨이 하나의 단위로 함께 옮겨진다 — 측정 대상 점(start/end)은 그대로 두고, 보조선
+ * (연장선)이 그 고정된 측정점에서 옮겨진 치수선까지 새로 이어진다. 'straight' 모드는 원래
+ * 보조선이 없었지만(치수선이 측정선 그 자체), 치수선이 옮겨지면 측정점과 분리되므로 이때는
+ * 보조선을 새로 만들어 이어준다.
+ */
+export function computeDisplacedDimensionGeometry(
+  dim: Pick<DimensionLine, 'start' | 'end' | 'mode' | 'labelOffset'>,
+): DimensionGeometry {
+  const base = computeDimensionGeometry(dim);
+  const offset = dim.labelOffset;
+  if (!offset || (offset.x === 0 && offset.y === 0)) return base;
+
+  const shift = (p: Point): Point => ({ x: p.x + offset.x, y: p.y + offset.y });
+  const lineStart = shift(base.lineStart);
+  const lineEnd = shift(base.lineEnd);
+
+  const extensionLines: [Point, Point][] =
+    dim.mode === 'straight'
+      ? [
+          [dim.start, lineStart],
+          [dim.end, lineEnd],
+        ]
+      : base.extensionLines.map(([measurePoint, lineSidePoint]) => [measurePoint, shift(lineSidePoint)]);
+
+  return {
+    lineStart,
+    lineEnd,
+    extensionLines,
+    valueMm: base.valueMm, // 측정값은 옮겨져도 그대로 — 실제 거리는 항상 start/end 기준
+    labelPosition: shift(base.labelPosition),
+  };
+}
+
+/** 치수선(보조선 포함, 라벨과 함께 옮겨진 상태 반영)을 클릭으로 선택하기 위한 히트테스트. */
 export function hitTestDimensions(point: Point, dimensions: DimensionLine[], toleranceMm: number): DimensionLine | null {
   for (let i = dimensions.length - 1; i >= 0; i--) {
     const dim = dimensions[i];
-    const geo = computeDimensionGeometry(dim);
+    const geo = computeDisplacedDimensionGeometry(dim);
     if (distanceToSegment(point, geo.lineStart, geo.lineEnd) <= toleranceMm) return dim;
     for (const [a, b] of geo.extensionLines) {
       if (distanceToSegment(point, a, b) <= toleranceMm) return dim;
@@ -79,17 +114,16 @@ export function hitTestDimensions(point: Point, dimensions: DimensionLine[], tol
   return null;
 }
 
-/** 치수선을 이동할 때 스냅 후보로 함께 검사할 주요 기준점 — 측정 대상 시작점·끝점·중간점. */
+/** 치수선을 이동할 때 스냅 후보로 함께 검사할 주요 기준점 — 측정 대상 시작점·끝점·중간점.
+ * (라벨/치수선의 표시 위치가 옮겨져 있어도 실제 측정점은 그대로이므로 이 값은 영향받지 않는다.) */
 export function dimensionKeyPoints(dim: Pick<DimensionLine, 'start' | 'end'>): Point[] {
   return [dim.start, dim.end, { x: (dim.start.x + dim.end.x) / 2, y: (dim.start.y + dim.end.y) / 2 }];
 }
 
 /**
- * 실제로 화면에 그릴 숫자(거리) 라벨의 위치(mm) — 기본 위치(치수선 중점 등)에 사용자가
- * 드래그로 옮겨둔 labelOffset을 더한 값이다. 측정 대상 점(start/end)과는 무관하다.
+ * 실제로 화면에 그릴 숫자(거리) 라벨의 위치(mm) — 치수선과 함께 옮겨진 위치를 그대로 쓴다.
+ * 측정 대상 점(start/end)과는 무관하다.
  */
 export function dimensionLabelPosition(dim: Pick<DimensionLine, 'start' | 'end' | 'mode' | 'labelOffset'>): Point {
-  const geo = computeDimensionGeometry(dim);
-  const offset = dim.labelOffset ?? { x: 0, y: 0 };
-  return { x: geo.labelPosition.x + offset.x, y: geo.labelPosition.y + offset.y };
+  return computeDisplacedDimensionGeometry(dim).labelPosition;
 }

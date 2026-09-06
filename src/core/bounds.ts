@@ -7,7 +7,7 @@ import type { TextLabel } from '../types/label';
 import type { Polygon } from '../types/polygon';
 import type { DimensionLine } from '../types/dimension';
 import { furnitureBounds } from './furnitureGeometry';
-import { computeDimensionGeometry } from './dimensionGeometry';
+import { computeDisplacedDimensionGeometry } from './dimensionGeometry';
 
 const EMPTY_PLAN_MARGIN_MM = 500;
 
@@ -91,7 +91,8 @@ export function computePlanBounds(
   }
 
   for (const dim of dimensions) {
-    const geo = computeDimensionGeometry(dim);
+    // 라벨과 함께 치수선이 옮겨져 있으면(labelOffset) 전체보기가 그 옮겨진 위치까지 포함해야 한다.
+    const geo = computeDisplacedDimensionGeometry(dim);
     for (const point of [dim.start, dim.end, geo.lineStart, geo.lineEnd]) {
       minX = Math.min(minX, point.x);
       minY = Math.min(minY, point.y);
