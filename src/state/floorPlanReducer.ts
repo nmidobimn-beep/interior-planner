@@ -14,6 +14,26 @@ export type SelectedObject = { kind: ObjectKind; id: string } | null;
 /** 다중 선택 목록의 항목 하나. null을 허용하지 않는 SelectedObject라고 보면 된다. */
 export type SelectionItem = { kind: ObjectKind; id: string };
 
+/** BL(벽 합치기) 명령이 만들어내는 병합 결과 — 원래 벽들을 지우고 새 벽 하나로 교체한다. */
+export interface MergeWallsPayload {
+  removedWallIds: string[];
+  newWall: Wall;
+  doorPatches: { id: string; offsetMm: number }[];
+  windowPatches: { id: string; offsetMm: number }[];
+}
+
+/** CO(복사) 명령 등에서 여러 객체를 한 번에 추가할 때 쓰는 항목 하나. */
+export type AddManyEntry =
+  | { kind: 'wall'; data: Wall }
+  | { kind: 'furniture'; data: Furniture }
+  | { kind: 'door'; data: Door }
+  | { kind: 'window'; data: WindowOpening }
+  | { kind: 'outlet'; data: Outlet }
+  | { kind: 'path'; data: Path }
+  | { kind: 'label'; data: TextLabel }
+  | { kind: 'polygon'; data: Polygon }
+  | { kind: 'dimension'; data: DimensionLine };
+
 /** 새 프로젝트에 항상 존재하는 첫 레이어의 고정 id (마지막 레이어는 삭제할 수 없어 항상 최소 1개 존재). */
 export const DEFAULT_LAYER_ID = 'layer-default';
 
@@ -93,7 +113,9 @@ export type FloorPlanAction =
   | { type: 'TOGGLE_LAYER_VISIBILITY'; id: string }
   | { type: 'DELETE_LAYER'; id: string }
   | { type: 'SET_ACTIVE_LAYER'; id: string }
-  | { type: 'MOVE_OBJECT_TO_LAYER'; kind: ObjectKind; id: string; layerId: string };
+  | { type: 'MOVE_OBJECT_TO_LAYER'; kind: ObjectKind; id: string; layerId: string }
+  | { type: 'MERGE_WALLS'; payload: MergeWallsPayload }
+  | { type: 'ADD_MANY'; entries: AddManyEntry[] };
 
 function removeFromSelection(selection: SelectionItem[], kind: ObjectKind, id: string): SelectionItem[] {
   return selection.filter((item) => !(item.kind === kind && item.id === id));
@@ -348,6 +370,67 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
         default:
           return state;
       }
+    }
+
+    case 'MERGE_WALLS': {
+      // BL 명령: 선택한 벽들(끝점끼리 이어진 하나의 사슬, 일직선)을 지우고 새 벽 하나로 교체한다.
+      // 그 벽에 달려 있던 문/창문은 사라지지 않고 새 벽으로 옮겨지며, offsetMm도 다시 계산된 값으로
+      // 갱신된다(월드 상의 실제 위치는 그대로 유지). 한 번의 액션이라 Undo 한 번으로 전체 복원된다.
+      const { removedWallIds, newWall, doorPatches, windowPatches } = action.payload;
+      const removedSet = new Set(removedWallIds);
+      const doorOffsetById = new Map(doorPatches.map((p) => [p.id, p.offsetMm]));
+      const windowOffsetById = new Map(windowPatches.map((p) => [p.id, p.offsetMm]));
+
+      return {
+        ...state,
+        walls: [...state.walls.filter((w) => !removedSet.has(w.id)), newWall],
+        doors: state.doors.map((d) =>
+          removedSet.has(d.wallId) ? { ...d, wallId: newWall.id, offsetMm: doorOffsetById.get(d.id) ?? d.offsetMm } : d,
+        ),
+        windows: state.windows.map((w) =>
+          removedSet.has(w.wallId) ? { ...w, wallId: newWall.id, offsetMm: windowOffsetById.get(w.id) ?? w.offsetMm } : w,
+        ),
+        selection: [{ kind: 'wall', id: newWall.id }],
+      };
+    }
+
+    case 'ADD_MANY': {
+      // CO(복사) 명령 등에서 여러 객체를 한 번에 추가한다 — 몇 개를 추가하든 Undo 한 건이다.
+      let next = state;
+      const newSelection: SelectionItem[] = [];
+      for (const entry of action.entries) {
+        switch (entry.kind) {
+          case 'wall':
+            next = { ...next, walls: [...next.walls, entry.data] };
+            break;
+          case 'furniture':
+            next = { ...next, furniture: [...next.furniture, entry.data] };
+            break;
+          case 'door':
+            next = { ...next, doors: [...next.doors, entry.data] };
+            break;
+          case 'window':
+            next = { ...next, windows: [...next.windows, entry.data] };
+            break;
+          case 'outlet':
+            next = { ...next, outlets: [...next.outlets, entry.data] };
+            break;
+          case 'path':
+            next = { ...next, paths: [...next.paths, entry.data] };
+            break;
+          case 'label':
+            next = { ...next, labels: [...next.labels, entry.data] };
+            break;
+          case 'polygon':
+            next = { ...next, polygons: [...next.polygons, entry.data] };
+            break;
+          case 'dimension':
+            next = { ...next, dimensions: [...next.dimensions, entry.data] };
+            break;
+        }
+        newSelection.push({ kind: entry.kind, id: entry.data.id });
+      }
+      return { ...next, selection: newSelection };
     }
 
     default:

@@ -13,24 +13,28 @@ import { drawDimensionPreview, drawDimensions } from '../core/renderDimension';
 import { polygonBounds } from '../core/polygonGeometry';
 import { computeSelectionBounds } from '../core/multiSelectGeometry';
 import { drawSelectionBounds, drawSelectionMarquee } from '../core/renderSelection';
+import { screenToWorld, worldToScreen } from '../core/viewport';
 import type { UseViewportResult } from '../hooks/useViewport';
 import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
+import type { UseCommandSystemResult } from '../hooks/useCommandSystem';
 import { useElementSize } from '../hooks/useElementSize';
 
 interface PlanCanvasProps {
   viewportApi: UseViewportResult;
   floorPlan: UseFloorPlanResult;
   interaction: UsePlanInteractionResult;
+  commandSystem: UseCommandSystemResult;
   showDemo: boolean;
   onSizeChange: (size: { width: number; height: number }) => void;
 }
 
 /** 평면도 편집 캔버스. 렌더링만 담당하고, 좌표 계산/상태는 core·hooks 쪽에 위임한다. */
-export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSizeChange }: PlanCanvasProps) {
+export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem, showDemo, onSizeChange }: PlanCanvasProps) {
   const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, onWheel } = viewportApi;
+  const { mergeWallCandidates, tryHandlePointerDown } = commandSystem;
   const {
     visibleWalls: walls,
     visibleFurniture: furniture,
@@ -153,6 +157,23 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
       drawSelectionMarquee(ctx, viewport, selectionBox.start, selectionBox.end);
     }
 
+    // BL(벽 합치기) 명령 진행 중 — 지금까지 고른 벽들을 굵은 강조선으로 표시한다.
+    if (mergeWallCandidates.size > 0) {
+      ctx.strokeStyle = COLORS.multiSelectBounds;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      for (const wall of walls) {
+        if (!mergeWallCandidates.has(wall.id)) continue;
+        const start = worldToScreen(viewport, wall.start);
+        const end = worldToScreen(viewport, wall.end);
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    }
+
     drawRulers(ctx, viewport, size, displayUnit);
   }, [
     viewport,
@@ -193,7 +214,20 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
     defaultWallThicknessMm,
     dimensionMode,
     displayUnit,
+    mergeWallCandidates,
   ]);
+
+  // CAD 커맨드 시스템(M/R/CO/BL)이 클릭 두 번짜리 진행 중일 때는 그 명령이 먼저 클릭을
+  // 처리하고, 그렇지 않으면(그리기 명령 등은 이미 기존 도구 상태로 동작 중이므로) 기존
+  // onPointerDown이 그대로 처리한다 — 같은 기능을 중복 구현하지 않기 위한 얇은 위임 층.
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const worldPoint = screenToWorld(viewport, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+      if (tryHandlePointerDown(worldPoint)) return;
+    }
+    onPointerDown(e);
+  };
 
   return (
     <div ref={containerRef} className="plan-canvas-container">
@@ -201,7 +235,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, showDemo, onSi
         ref={canvasRef}
         className={`plan-canvas plan-canvas--${activeTool}`}
         tabIndex={0}
-        onPointerDown={onPointerDown}
+        onPointerDown={handlePointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerLeave}

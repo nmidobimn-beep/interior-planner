@@ -249,6 +249,15 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
 
   const dragState = useRef<DragState | null>(null);
 
+  // CAD 커맨드 시스템(예: "B + Space")으로 반복 배치 중일 때는, 객체 하나를 놓아도 도구가
+  // '선택'으로 자동 전환되지 않고 그대로 유지되어야 한다(같은 도구를 계속 반복 사용). 툴바
+  // 버튼으로 직접 켠 경우는 기존처럼 하나 놓으면 바로 선택 도구로 돌아간다 — 두 입력 방식 모두
+  // 아래의 동일한 배치 로직을 그대로 호출하며, 이 플래그만 그 뒤의 "선택 도구로 전환" 여부를 가른다.
+  const keepToolActiveRef = useRef(false);
+  const setKeepToolActive = useCallback((value: boolean) => {
+    keepToolActiveRef.current = value;
+  }, []);
+
   const setActiveTool = useCallback((tool: ToolId) => {
     setActiveToolState(tool);
     setChainStart(null);
@@ -261,6 +270,19 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     setPreviewPoint(null);
     setPolygonDraft([]);
   }, []);
+
+  /**
+   * 지금까지 찍은 다각형 꼭짓점으로 도형을 완성한다(Enter 키, 또는 CAD 커맨드 시스템에서 MU
+   * 명령 작성 중 Space를 눌렀을 때 공통으로 쓰는 로직). 꼭짓점이 부족하면 아무 일도 하지 않는다.
+   */
+  const completePolygonDraft = useCallback(() => {
+    setPolygonDraft((prev) => {
+      if (prev.length < MIN_POLYGON_VERTICES) return prev;
+      addPolygon(prev);
+      if (!keepToolActiveRef.current) setActiveTool('select');
+      return [];
+    });
+  }, [addPolygon, setActiveTool]);
 
   const getScreenPoint = useCallback((e: { clientX: number; clientY: number; currentTarget: HTMLElement }) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -376,7 +398,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
         const size = DEFAULT_FURNITURE_SIZE[activeTool];
         const extra = activeTool === 'lshape' ? { armThicknessMm: DEFAULT_ARM_THICKNESS_MM } : undefined;
         addFurniture(activeTool, snapped.point, size, extra);
-        setActiveTool('select');
+        if (!keepToolActiveRef.current) setActiveTool('select');
         return;
       }
 
@@ -387,7 +409,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           const offset = clampOpeningOffset(hit.offsetMm - width / 2, width, wallLengthMm(hit.wall));
           if (activeTool === 'door') addDoor(hit.wall.id, offset, width);
           else addWindow(hit.wall.id, offset, width);
-          setActiveTool('select');
+          if (!keepToolActiveRef.current) setActiveTool('select');
         }
         return;
       }
@@ -395,14 +417,14 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       if (activeTool === 'outlet') {
         const snapped = snapPoint(worldRaw, { candidatePoints: snapCandidates(), scale: viewport.scale, enabled: snapEnabled });
         addOutlet(snapped.point, DEFAULT_OUTLET_COUNT);
-        setActiveTool('select');
+        if (!keepToolActiveRef.current) setActiveTool('select');
         return;
       }
 
       if (activeTool === 'label') {
         const snapped = snapPoint(worldRaw, { candidatePoints: snapCandidates(), scale: viewport.scale, enabled: snapEnabled });
         addLabel(snapped.point, DEFAULT_LABEL_TEXT);
-        setActiveTool('select');
+        if (!keepToolActiveRef.current) setActiveTool('select');
         return;
       }
 
@@ -422,7 +444,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
             const isCurve = pathShape === 'curve';
             const controlPoint = isCurve ? defaultControlPoint(chainStart, snapped.point) : undefined;
             addPath(chainStart, snapped.point, true, isCurve, controlPoint);
-            setActiveTool('select');
+            if (!keepToolActiveRef.current) setActiveTool('select');
           }
         }
         return;
@@ -438,7 +460,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           if (distance(screen, firstScreen) <= POLYGON_CLOSE_HIT_RADIUS_PX) {
             addPolygon(polygonDraft);
             setPolygonDraft([]);
-            setActiveTool('select');
+            if (!keepToolActiveRef.current) setActiveTool('select');
             return;
           }
         }
@@ -1354,9 +1376,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       }
       if (e.key === 'Enter' && activeTool === 'polygon' && polygonDraft.length >= MIN_POLYGON_VERTICES) {
         e.preventDefault();
-        addPolygon(polygonDraft);
-        setPolygonDraft([]);
-        setActiveTool('select');
+        completePolygonDraft();
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1387,7 +1407,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           break;
       }
     },
-    [activeTool, addPolygon, copySelected, deleteSelected, endChain, pasteClipboard, polygonDraft, redo, setActiveTool, undo],
+    [activeTool, completePolygonDraft, copySelected, deleteSelected, endChain, pasteClipboard, polygonDraft, redo, undo],
   );
 
   return {
@@ -1420,6 +1440,9 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     onPointerLeave,
     onContextMenu,
     onKeyDown,
+    endChain,
+    completePolygonDraft,
+    setKeepToolActive,
   };
 }
 

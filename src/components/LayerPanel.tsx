@@ -14,7 +14,7 @@ export function LayerPanel({ floorPlan }: LayerPanelProps) {
   const { layers, activeLayerId, setActiveLayer, addLayer, renameLayer, toggleLayerVisibility, deleteLayer } = floorPlan;
 
   return (
-    <>
+    <div id="layer-panel">
       <div className="side-panel-title">레이어</div>
       <ul className="layer-list">
         {layers.map((layer) => (
@@ -55,6 +55,6 @@ export function LayerPanel({ floorPlan }: LayerPanelProps) {
       <button type="button" className="layer-add-button" onClick={() => addLayer()}>
         + 새 레이어
       </button>
-    </>
+    </div>
   );
 }

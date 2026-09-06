@@ -7,6 +7,8 @@ import { ToolPanel } from './components/ToolPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { LayerPanel } from './components/LayerPanel';
 import { FurnitureLibraryPanel } from './components/FurnitureLibraryPanel';
+import { CommandWindow } from './components/CommandWindow';
+import { CommandHelpModal } from './components/CommandHelpModal';
 import { computePlanBounds } from './core/bounds';
 import { DEMO_BOUNDS } from './core/demoScene';
 import { screenToWorld } from './core/viewport';
@@ -15,6 +17,7 @@ import { useFloorPlan } from './hooks/useFloorPlan';
 import { usePlanInteraction } from './hooks/usePlanInteraction';
 import { useViewport } from './hooks/useViewport';
 import { useFurnitureLibrary } from './hooks/useFurnitureLibrary';
+import { useCommandSystem } from './hooks/useCommandSystem';
 import type { Size } from './types/geometry';
 import type { FurnitureLibraryItem } from './types/furnitureLibrary';
 
@@ -26,6 +29,7 @@ function App() {
   const floorPlan = useFloorPlan();
   const interaction = usePlanInteraction({ viewport: viewportApi.viewport, panBy: viewportApi.panBy, floorPlan });
   const furnitureLibrary = useFurnitureLibrary();
+  const commandSystem = useCommandSystem({ interaction, floorPlan, viewport: viewportApi.viewport });
 
   const [canvasSize, setCanvasSize] = useState<Size>({ width: 0, height: 0 });
   const [showDemo, setShowDemo] = useState(true);
@@ -105,6 +109,7 @@ function App() {
             viewportApi={viewportApi}
             floorPlan={floorPlan}
             interaction={interaction}
+            commandSystem={commandSystem}
             showDemo={showDemo}
             onSizeChange={handleSizeChange}
           />
@@ -115,6 +120,9 @@ function App() {
           <LayerPanel floorPlan={floorPlan} />
         </aside>
       </div>
+
+      <CommandWindow commandSystem={commandSystem} />
+      <CommandHelpModal commandSystem={commandSystem} />
 
       <StatusBar viewport={viewportApi.viewport} cursorWorld={interaction.cursorWorld} unit={interaction.displayUnit} />
     </div>

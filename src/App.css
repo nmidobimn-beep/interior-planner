@@ -440,6 +440,345 @@
   color: #e0554f;
 }
 
+/* --- Layer panel flash (LA 명령으로 이동했을 때 짧게 강조) --- */
+@keyframes layer-panel-flash {
+  0% {
+    background: rgba(47, 111, 237, 0.18);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.layer-panel-flash {
+  animation: layer-panel-flash 0.9s ease-out;
+  border-radius: 6px;
+}
+
+/* --- Command Window (CAD 스타일 명령창) --- */
+.command-window-collapsed {
+  flex-shrink: 0;
+  height: 24px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  padding: 0 12px;
+}
+
+.command-window-collapsed:hover {
+  background: #eef0f4;
+}
+
+.command-window {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 180px;
+  border-top: 1px solid var(--border);
+  background: #1e1f26;
+  color: #d7d9e0;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+}
+
+.command-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.command-window-toggle {
+  border: none;
+  background: none;
+  color: #9aa0ad;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.command-window-toggle:hover {
+  color: #fff;
+}
+
+.command-window-help-button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: none;
+  color: #d7d9e0;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+
+.command-window-help-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.command-window-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 10px;
+}
+
+.command-window-log-empty {
+  color: #6b7280;
+}
+
+.command-window-log-line {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.command-window-log-line--command {
+  color: #6fd3ff;
+}
+
+.command-window-log-line--success {
+  color: #7be0a8;
+}
+
+.command-window-log-line--error {
+  color: #ff8a80;
+}
+
+.command-window-log-line--info {
+  color: #d7d9e0;
+}
+
+.command-window-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e0a94f;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.command-window-status-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-window-status-prompt {
+  color: #9aa0ad;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-window-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.command-window-input-label {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.command-window-input-field {
+  flex: 1;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.command-window-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 1px;
+  background: #6fd3ff;
+  vertical-align: text-bottom;
+  animation: command-caret-blink 1s steps(1) infinite;
+}
+
+@keyframes command-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.command-autocomplete-list {
+  position: absolute;
+  bottom: 100%;
+  left: 10px;
+  right: 10px;
+  margin: 0 0 4px;
+  padding: 4px;
+  list-style: none;
+  background: #2a2c36;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.command-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  background: none;
+  color: #d7d9e0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  border-radius: 4px;
+}
+
+.command-autocomplete-item:hover,
+.command-autocomplete-item.is-active {
+  background: rgba(111, 211, 255, 0.18);
+}
+
+.command-autocomplete-code {
+  font-weight: 700;
+  color: #6fd3ff;
+  min-width: 40px;
+}
+
+.command-autocomplete-name {
+  color: #9aa0ad;
+}
+
+/* --- Command help modal --- */
+.command-help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 21, 26, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.command-help-modal {
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.command-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 0;
+}
+
+.command-help-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.command-help-close {
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.command-help-close:hover {
+  color: var(--text);
+}
+
+.command-help-search {
+  margin: 12px 20px 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.command-help-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px 4px;
+}
+
+.command-help-category {
+  margin-bottom: 14px;
+}
+
+.command-help-category-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.command-help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.command-help-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.command-help-code {
+  width: 56px;
+  font-weight: 700;
+  color: #2f6fed;
+  white-space: nowrap;
+}
+
+.command-help-name {
+  width: 90px;
+  white-space: nowrap;
+}
+
+.command-help-desc {
+  color: var(--text-muted);
+}
+
+.command-help-empty {
+  color: var(--text-muted);
+  padding: 20px 0;
+  text-align: center;
+}
+
+.command-help-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* --- Status bar --- */
 .status-bar {
   display: flex;

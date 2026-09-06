@@ -22,7 +22,9 @@ import { wallLengthMm } from '../core/wallGeometry';
 import {
   historyFloorPlanReducer,
   initialFloorPlanState,
+  type AddManyEntry,
   type FloorPlanState,
+  type MergeWallsPayload,
   type ObjectKind,
   type SelectedObject,
   type SelectionItem,
@@ -545,6 +547,17 @@ export function useFloorPlan() {
     [],
   );
 
+  /** BL(벽 합치기) 명령 — core/wallMerge.ts에서 계산한 결과를 그대로 한 액션으로 반영한다. */
+  const mergeWalls = useCallback((payload: MergeWallsPayload) => {
+    dispatch({ type: 'MERGE_WALLS', payload });
+  }, []);
+
+  /** CO(복사) 명령 등 — 여러 객체를 한 번에 추가한다(몇 개든 Undo 한 건). */
+  const addMany = useCallback((entries: AddManyEntry[]) => {
+    if (entries.length === 0) return;
+    dispatch({ type: 'ADD_MANY', entries });
+  }, []);
+
   const visibleLayerIds = useMemo(() => new Set(state.layers.filter((l) => l.visible).map((l) => l.id)), [state.layers]);
   const visibleWalls = useMemo(() => byVisibleLayer(state.walls, visibleLayerIds), [state.walls, visibleLayerIds]);
   const visibleFurniture = useMemo(() => byVisibleLayer(state.furniture, visibleLayerIds), [state.furniture, visibleLayerIds]);
@@ -656,6 +669,8 @@ export function useFloorPlan() {
     deleteLayer,
     setActiveLayer,
     moveObjectToLayer,
+    mergeWalls,
+    addMany,
   };
 }
 
