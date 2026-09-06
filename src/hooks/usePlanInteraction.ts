@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Bounds, Point } from '../types/geometry';
 import type { Wall } from '../types/wall';
 import type { Path } from '../types/path';
@@ -184,15 +184,16 @@ function mergeSelections(existing: SelectionItem[], additions: SelectionItem[]):
  */
 export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanInteractionArgs) {
   const {
-    visibleWalls: walls,
-    visibleFurniture: furniture,
-    visibleDoors: doors,
-    visibleWindows: windows,
-    visibleOutlets: outlets,
-    visiblePaths: paths,
-    visibleLabels: labels,
-    visiblePolygons: polygons,
-    visibleDimensions: dimensions,
+    visibleWalls,
+    visibleFurniture,
+    visibleDoors,
+    visibleWindows,
+    visibleOutlets,
+    visiblePaths,
+    visibleLabels,
+    visiblePolygons,
+    visibleDimensions,
+    activeLayerId,
     selectedWall,
     selectedFurniture,
     selectedPath,
@@ -240,6 +241,20 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     commitTransientEdit,
     discardTransientEdit,
   } = floorPlan;
+
+  // 레이어 편집 제한: 선택/이동/회전/삭제/복사 등 모든 편집 판정은 "활성 레이어 + 보이는
+  // 레이어" 객체만 대상으로 한다(공통 판정, 객체 종류별 예외 없음). 스냅은 이 제한과 무관하게
+  // 보이는 비활성 레이어 객체까지 후보로 쓰므로, snapCandidates()에서는 원본 visibleX를 쓴다.
+  const onActiveLayer = useCallback(<T extends { layerId: string }>(item: T) => item.layerId === activeLayerId, [activeLayerId]);
+  const walls = useMemo(() => visibleWalls.filter(onActiveLayer), [visibleWalls, onActiveLayer]);
+  const furniture = useMemo(() => visibleFurniture.filter(onActiveLayer), [visibleFurniture, onActiveLayer]);
+  const doors = useMemo(() => visibleDoors.filter(onActiveLayer), [visibleDoors, onActiveLayer]);
+  const windows = useMemo(() => visibleWindows.filter(onActiveLayer), [visibleWindows, onActiveLayer]);
+  const outlets = useMemo(() => visibleOutlets.filter(onActiveLayer), [visibleOutlets, onActiveLayer]);
+  const paths = useMemo(() => visiblePaths.filter(onActiveLayer), [visiblePaths, onActiveLayer]);
+  const labels = useMemo(() => visibleLabels.filter(onActiveLayer), [visibleLabels, onActiveLayer]);
+  const polygons = useMemo(() => visiblePolygons.filter(onActiveLayer), [visiblePolygons, onActiveLayer]);
+  const dimensions = useMemo(() => visibleDimensions.filter(onActiveLayer), [visibleDimensions, onActiveLayer]);
 
   const [activeTool, setActiveToolState] = useState<ToolId>('select');
   const [defaultWallThicknessMm, setDefaultWallThicknessMm] = useState(DEFAULT_WALL_THICKNESS_MM);
@@ -367,10 +382,36 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
 
+  // 스냅은 활성 레이어 제한과 무관하다 — 보이는 비활성 레이어 객체도 스냅 후보로 쓴다(요구사항).
   const snapCandidates = useCallback(
     (exclude?: SnapExclude) =>
-      collectSnapCandidates({ walls, furniture, doors, windows, outlets, paths, labels, polygons, dimensions }, snapCategories, exclude),
-    [doors, furniture, labels, outlets, paths, polygons, dimensions, snapCategories, walls, windows],
+      collectSnapCandidates(
+        {
+          walls: visibleWalls,
+          furniture: visibleFurniture,
+          doors: visibleDoors,
+          windows: visibleWindows,
+          outlets: visibleOutlets,
+          paths: visiblePaths,
+          labels: visibleLabels,
+          polygons: visiblePolygons,
+          dimensions: visibleDimensions,
+        },
+        snapCategories,
+        exclude,
+      ),
+    [
+      visibleDoors,
+      visibleFurniture,
+      visibleLabels,
+      visibleOutlets,
+      visiblePaths,
+      visiblePolygons,
+      visibleDimensions,
+      snapCategories,
+      visibleWalls,
+      visibleWindows,
+    ],
   );
 
   /** 다중 선택 이동/회전 시작 시, 선택된 각 객체의 현재 상태를 스냅샷으로 캡처한다. */

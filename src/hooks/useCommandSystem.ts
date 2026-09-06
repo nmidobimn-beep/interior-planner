@@ -547,8 +547,12 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     (worldPoint: Point, shiftKey = false): boolean => {
       if (!activeCommand) return false;
 
+      // TR/BL은 벽 편집(트림/연장/병합)이므로, 다른 편집과 마찬가지로 활성 레이어 + 보이는
+      // 레이어의 벽만 대상으로 한다(공통 판정: layerId === activeLayerId).
+      const editableWalls = floorPlan.visibleWalls.filter((w) => w.layerId === floorPlan.activeLayerId);
+
       if (activeCommand.command === 'TR') {
-        const hit = hitTestWalls(worldPoint, floorPlan.walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
+        const hit = hitTestWalls(worldPoint, editableWalls, WALL_HIT_TOLERANCE_PX / viewport.scale);
         if (!hit) return true;
         if (!trimBaseWallId) {
           setTrimBaseWallId(hit.id);
@@ -575,7 +579,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
       }
 
       if (activeCommand.command === 'BL') {
-        const hit = hitTestWalls(worldPoint, floorPlan.walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
+        const hit = hitTestWalls(worldPoint, editableWalls, WALL_HIT_TOLERANCE_PX / viewport.scale);
         if (hit) {
           setMergeWallCandidates((prev) => {
             const next = new Set(prev);

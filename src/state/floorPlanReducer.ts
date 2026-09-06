@@ -338,7 +338,9 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
     }
 
     case 'SET_ACTIVE_LAYER':
-      return { ...state, activeLayerId: action.id };
+      // 활성 레이어가 바뀌면 이전 레이어에서 선택돼 있던 객체는 자동으로 선택 해제한다
+      // (편집은 활성 레이어 객체만 가능하므로, 다른 레이어의 선택 상태를 그대로 두지 않는다).
+      return { ...state, activeLayerId: action.id, selection: [] };
 
     case 'MOVE_OBJECT_TO_LAYER': {
       switch (action.kind) {
