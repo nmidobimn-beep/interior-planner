@@ -21,19 +21,30 @@ export function FurnitureForm({ initial, submitLabel, onSubmit, onCancel }: Furn
   const [width, setWidth] = useState(String(initial?.width ?? ''));
   const [height, setHeight] = useState(String(initial?.height ?? ''));
   const [shapeType, setShapeType] = useState(initial?.shape_type ?? 'rectangle');
+  const [armThickness, setArmThickness] = useState(initial?.arm_thickness ? String(initial.arm_thickness) : '');
   const [memo, setMemo] = useState(initial?.memo ?? '');
   const [saving, setSaving] = useState(false);
 
+  const isLshape = shapeType === 'lshape';
   const widthMm = parseFloat(width);
   const heightMm = parseFloat(height);
-  const canSubmit = name.trim().length > 0 && widthMm > 0 && heightMm > 0 && !saving;
+  const armThicknessMm = parseFloat(armThickness);
+  const canSubmit = name.trim().length > 0 && widthMm > 0 && heightMm > 0 && (!isLshape || armThicknessMm > 0) && !saving;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
     setSaving(true);
     try {
-      await onSubmit({ name: name.trim(), color, width: widthMm, height: heightMm, shape_type: shapeType, memo: memo.trim() || undefined });
+      await onSubmit({
+        name: name.trim(),
+        color,
+        width: widthMm,
+        height: heightMm,
+        shape_type: shapeType,
+        arm_thickness: isLshape ? armThicknessMm : undefined,
+        memo: memo.trim() || undefined,
+      });
     } finally {
       setSaving(false);
     }
@@ -67,6 +78,19 @@ export function FurnitureForm({ initial, submitLabel, onSubmit, onCancel }: Furn
           ))}
         </select>
       </div>
+      {isLshape && (
+        <div className="field-row">
+          <label htmlFor="furniture-form-arm-thickness">팔 두께(mm)</label>
+          <input
+            id="furniture-form-arm-thickness"
+            type="number"
+            min="1"
+            value={armThickness}
+            onChange={(e) => setArmThickness(e.target.value)}
+            placeholder="300"
+          />
+        </div>
+      )}
       <div className="field-row field-row--stacked">
         <label htmlFor="furniture-form-memo">메모</label>
         <textarea id="furniture-form-memo" rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} />

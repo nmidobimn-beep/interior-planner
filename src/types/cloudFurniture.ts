@@ -6,6 +6,8 @@ export interface CloudFurnitureItem {
   width: number;
   height: number;
   shape_type: string;
+  /** 'lshape'(ㄱ자형) 전용 — ㄱ자 팔의 두께(mm). 다른 도형은 null. */
+  arm_thickness: number | null;
   memo: string | null;
   created_at: string;
   updated_at: string;
@@ -17,5 +19,6 @@ export interface CloudFurnitureInput {
   width: number;
   height: number;
   shape_type?: string;
+  arm_thickness?: number;
   memo?: string;
 }

@@ -100,7 +100,7 @@ function App() {
     (item: CloudFurnitureItem) => {
       const position = screenToWorld(viewportApi.viewport, LIBRARY_PLACE_ANCHOR_SCREEN);
       const shape = item.shape_type === 'circle' || item.shape_type === 'lshape' ? item.shape_type : 'rectangle';
-      const created = floorPlan.addFurniture(shape, position, { width: item.width, height: item.height });
+      const created = floorPlan.addFurniture(shape, position, { width: item.width, height: item.height }, { armThicknessMm: item.arm_thickness ?? undefined });
       floorPlan.updateFurniture(created.id, {
         name: item.name,
         color: item.color ?? DEFAULT_FURNITURE_COLOR,

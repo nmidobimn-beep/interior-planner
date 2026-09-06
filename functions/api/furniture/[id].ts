@@ -1,6 +1,6 @@
 import { errorResponse, json, type Env } from '../_utils';
 
-const FIELDS = ['name', 'color', 'width', 'height', 'shape_type', 'memo'] as const;
+const FIELDS = ['name', 'color', 'width', 'height', 'shape_type', 'arm_thickness', 'memo'] as const;
 
 /** 가구 원본 수정(이름/색상/크기/도형/메모). 위치·회전 등 배치 상태는 여기서 다루지 않는다. */
 export async function onRequestPut(context: { request: Request; params: { id: string }; env: Env }) {
