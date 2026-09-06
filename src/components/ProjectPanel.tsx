@@ -3,10 +3,13 @@ import type { UseProjectsResult } from '../hooks/useProjects';
 
 interface ProjectPanelProps {
   projects: UseProjectsResult;
+  /** 미저장 변경 보호 공통 함수 — 프로젝트 전환/생성/삭제처럼 현재 도면을 바꿀 수 있는 동작은
+   * 이 함수를 통해서만 실행한다(dirty가 아니면 바로 실행됨). */
+  confirmUnsavedChanges: (nextAction: () => void) => void;
 }
 
 /** 도면 프로젝트 생성/선택/이름 수정/삭제 + 현재 도면 저장·불러오기. 가구 라이브러리와는 완전히 별개다. */
-export function ProjectPanel({ projects }: ProjectPanelProps) {
+export function ProjectPanel({ projects, confirmUnsavedChanges }: ProjectPanelProps) {
   const { projects: list, activeProjectId, status, errorMessage, selectProject, saveActiveProject, createAndSelect, rename, remove } = projects;
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -15,7 +18,7 @@ export function ProjectPanel({ projects }: ProjectPanelProps) {
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    createAndSelect(name);
+    confirmUnsavedChanges(() => createAndSelect(name));
     setNewName('');
   };
 
@@ -57,7 +60,7 @@ export function ProjectPanel({ projects }: ProjectPanelProps) {
                 <button
                   type="button"
                   className={`project-panel-item-button${project.id === activeProjectId ? ' is-active' : ''}`}
-                  onClick={() => selectProject(project.id)}
+                  onClick={() => confirmUnsavedChanges(() => selectProject(project.id))}
                   title="이 프로젝트 불러오기"
                 >
                   {project.name}
@@ -76,7 +79,12 @@ export function ProjectPanel({ projects }: ProjectPanelProps) {
                 <button
                   type="button"
                   className="project-panel-item-icon"
-                  onClick={() => remove(project.id)}
+                  onClick={() => {
+                    // 지금 열려있는(활성) 프로젝트를 지우는 경우에만 미저장 변경 보호가 의미 있다 —
+                    // 다른 프로젝트를 지우는 건 현재 작업 중인 도면과 무관하다.
+                    if (project.id === activeProjectId) confirmUnsavedChanges(() => remove(project.id));
+                    else remove(project.id);
+                  }}
                   title="프로젝트 삭제(가구 라이브러리는 유지됨)"
                 >
                   ×

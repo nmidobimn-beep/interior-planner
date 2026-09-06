@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { Toolbar } from './components/Toolbar';
 import { PlanCanvas } from './components/PlanCanvas';
@@ -11,6 +11,7 @@ import { CloudFurnitureLibraryPanel } from './components/CloudFurnitureLibraryPa
 import { ProjectPanel } from './components/ProjectPanel';
 import { CommandWindow } from './components/CommandWindow';
 import { CommandHelpModal } from './components/CommandHelpModal';
+import { UnsavedChangesModal } from './components/UnsavedChangesModal';
 import { computePlanBounds } from './core/bounds';
 import { DEMO_BOUNDS } from './core/demoScene';
 import { screenToWorld } from './core/viewport';
@@ -21,6 +22,7 @@ import { useViewport } from './hooks/useViewport';
 import { useFurnitureLibrary } from './hooks/useFurnitureLibrary';
 import { useCloudFurnitureLibrary } from './hooks/useCloudFurnitureLibrary';
 import { useProjects } from './hooks/useProjects';
+import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
 import { useCommandSystem } from './hooks/useCommandSystem';
 import type { Size } from './types/geometry';
 import type { FurnitureLibraryItem } from './types/furnitureLibrary';
@@ -36,7 +38,19 @@ function App() {
   const furnitureLibrary = useFurnitureLibrary();
   const cloudFurnitureLibrary = useCloudFurnitureLibrary();
   const projects = useProjects(floorPlan);
+  const unsavedGuard = useUnsavedChangesGuard(floorPlan, projects);
   const commandSystem = useCommandSystem({ interaction, floorPlan, viewport: viewportApi.viewport });
+
+  // 미저장 변경이 있는 상태에서 새로고침/탭 닫기를 하면 브라우저 기본 종료 경고를 띄운다.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!floorPlan.dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [floorPlan.dirty]);
 
   const [canvasSize, setCanvasSize] = useState<Size>({ width: 0, height: 0 });
   const [showDemo, setShowDemo] = useState(true);
@@ -121,12 +135,13 @@ function App() {
         fitBounds={fitBounds}
         showDemo={showDemo}
         onToggleDemo={setShowDemo}
+        confirmUnsavedChanges={unsavedGuard.confirmUnsavedChanges}
       />
 
       <div className="app-body">
         <aside className="side-panel side-panel-left">
           <ToolPanel interaction={interaction} />
-          <ProjectPanel projects={projects} />
+          <ProjectPanel projects={projects} confirmUnsavedChanges={unsavedGuard.confirmUnsavedChanges} />
           <CloudFurnitureLibraryPanel library={cloudFurnitureLibrary} onPlace={handlePlaceCloudFurniture} />
           <FurnitureLibraryPanel furnitureLibrary={furnitureLibrary} onPlace={handlePlaceLibraryItem} />
         </aside>
@@ -150,6 +165,11 @@ function App() {
 
       <CommandWindow commandSystem={commandSystem} />
       <CommandHelpModal commandSystem={commandSystem} />
+      <UnsavedChangesModal
+        open={unsavedGuard.pendingUnsavedChanges}
+        hasActiveProject={unsavedGuard.hasActiveProject}
+        onResolve={unsavedGuard.resolveUnsavedChanges}
+      />
 
       <StatusBar viewport={viewportApi.viewport} cursorWorld={interaction.cursorWorld} unit={interaction.displayUnit} />
     </div>

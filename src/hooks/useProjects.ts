@@ -68,15 +68,14 @@ export function useProjects(floorPlan: UseFloorPlanResult) {
     [floorPlan],
   );
 
-  const saveActiveProject = useCallback(async () => {
-    if (!activeProjectId) return;
-    setStatus('saving');
-    try {
+  /** 현재 도면을 지정한 project_id에 저장(plan_data + project_objects). */
+  const saveToProject = useCallback(
+    async (projectId: string) => {
       const doc = floorPlan.exportDocument();
       const { furniture, ...rest } = doc;
-      await saveProjectPlan(activeProjectId, rest);
+      await saveProjectPlan(projectId, rest);
       await replaceProjectObjects(
-        activeProjectId,
+        projectId,
         furniture.map((f) => ({
           id: f.id,
           furniture_id: f.libraryId ?? null,
@@ -87,6 +86,16 @@ export function useProjects(floorPlan: UseFloorPlanResult) {
           object_data: f,
         })),
       );
+    },
+    [floorPlan],
+  );
+
+  const saveActiveProject = useCallback(async () => {
+    if (!activeProjectId) return;
+    setStatus('saving');
+    try {
+      await saveToProject(activeProjectId);
+      floorPlan.markSaved();
       await refreshProjects();
       setStatus('idle');
       setErrorMessage(null);
@@ -94,7 +103,29 @@ export function useProjects(floorPlan: UseFloorPlanResult) {
       setStatus('error');
       setErrorMessage(err instanceof Error ? err.message : '저장하지 못했습니다');
     }
-  }, [activeProjectId, floorPlan, refreshProjects]);
+  }, [activeProjectId, saveToProject, floorPlan, refreshProjects]);
+
+  /** 현재 도면을 "다른 이름"의 새 프로젝트로 저장한다(미저장 변경 보호에서 사용) —
+   * 활성 프로젝트는 바꾸지 않는다(바로 이어서 다른 프로젝트를 불러오는 흐름이라 의미 없음). */
+  const saveAsNewProject = useCallback(
+    async (name: string) => {
+      setStatus('saving');
+      try {
+        const project = await createProject(name);
+        await saveToProject(project.id);
+        floorPlan.markSaved();
+        await refreshProjects();
+        setStatus('idle');
+        setErrorMessage(null);
+        return project;
+      } catch (err) {
+        setStatus('error');
+        setErrorMessage(err instanceof Error ? err.message : '다른 이름으로 저장하지 못했습니다');
+        throw err;
+      }
+    },
+    [saveToProject, floorPlan, refreshProjects],
+  );
 
   const createAndSelect = useCallback(
     async (name: string) => {
@@ -131,6 +162,7 @@ export function useProjects(floorPlan: UseFloorPlanResult) {
     refreshProjects,
     selectProject,
     saveActiveProject,
+    saveAsNewProject,
     createAndSelect,
     rename,
     remove,

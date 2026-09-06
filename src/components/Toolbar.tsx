@@ -12,6 +12,9 @@ interface ToolbarProps {
   fitBounds: Bounds;
   showDemo: boolean;
   onToggleDemo: (value: boolean) => void;
+  /** 미저장 변경 보호 공통 함수 — 새 도면/파일 불러오기처럼 현재 도면을 지울 수 있는 동작은
+   * 이 함수를 통해서만 실행한다(dirty가 아니면 바로 실행됨). */
+  confirmUnsavedChanges: (nextAction: () => void) => void;
 }
 
 function formatTimestamp(date: Date): string {
@@ -20,19 +23,17 @@ function formatTimestamp(date: Date): string {
 }
 
 /** 상단 툴바. 새로 만들기/저장/불러오기, 실행취소/다시실행/복사/붙여넣기, 확대/축소/전체보기, 스냅 on/off를 담당한다. */
-export function Toolbar({ viewportApi, interaction, floorPlan, canvasSize, fitBounds, showDemo, onToggleDemo }: ToolbarProps) {
+export function Toolbar({ viewportApi, interaction, floorPlan, canvasSize, fitBounds, showDemo, onToggleDemo, confirmUnsavedChanges }: ToolbarProps) {
   const { viewport, zoomIn, zoomOut, fitToView } = viewportApi;
   const { snapEnabled, setSnapEnabled, snapCategories, toggleSnapCategory, displayUnit, cycleDisplayUnit } = interaction;
-  const { canUndo, canRedo, undo, redo, canCopy, canPaste, copySelected, pasteClipboard, exportDocument, loadDocument, newDocument } =
+  const { canUndo, canRedo, undo, redo, canCopy, canPaste, copySelected, pasteClipboard, exportDocument, loadDocument, newDocument, markSaved } =
     floorPlan;
   const zoomPercent = Math.round(viewport.scale * 100);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleNew = useCallback(() => {
-    if (window.confirm('현재 도면을 지우고 새로 시작할까요? 저장하지 않은 변경 사항은 되돌릴 수 없습니다.')) {
-      newDocument();
-    }
-  }, [newDocument]);
+    confirmUnsavedChanges(() => newDocument());
+  }, [confirmUnsavedChanges, newDocument]);
 
   const handleSave = useCallback(() => {
     const doc = exportDocument();
@@ -43,7 +44,8 @@ export function Toolbar({ viewportApi, interaction, floorPlan, canvasSize, fitBo
     link.download = `interior-plan-${formatTimestamp(new Date())}.json`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [exportDocument]);
+    markSaved(); // 파일로 내려받은 것도 "저장"으로 간주해 미저장 표시를 해제한다.
+  }, [exportDocument, markSaved]);
 
   const handleLoadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -59,16 +61,18 @@ export function Toolbar({ viewportApi, interaction, floorPlan, canvasSize, fitBo
       reader.onload = () => {
         try {
           const parsed = JSON.parse(String(reader.result));
-          if (!loadDocument(parsed)) {
-            window.alert('올바른 도면 파일이 아닙니다.');
-          }
+          confirmUnsavedChanges(() => {
+            if (!loadDocument(parsed)) {
+              window.alert('올바른 도면 파일이 아닙니다.');
+            }
+          });
         } catch {
           window.alert('파일을 읽을 수 없습니다. JSON 형식이 맞는지 확인해 주세요.');
         }
       };
       reader.readAsText(file);
     },
-    [loadDocument],
+    [loadDocument, confirmUnsavedChanges],
   );
 
   return (

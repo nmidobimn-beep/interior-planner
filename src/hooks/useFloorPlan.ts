@@ -518,16 +518,31 @@ export function useFloorPlan() {
 
   const exportDocument = useCallback((): FloorPlanDocument => serializeFloorPlan(state), [state]);
 
+  // 미저장 변경 감지: 마지막으로 "저장됨" 처리된 state를 기준선으로 두고, 현재 state가 그
+  // 기준선과 다른 객체 참조면(reducer는 항상 새 객체를 만들므로) 미저장 상태다. Undo/Redo로
+  // 정확히 그 기준선 상태로 되돌아오면 참조가 같아져 자동으로 dirty가 풀린다.
+  const savedStateRef = useRef<FloorPlanState>(state);
+  // 렌더 중 ref 값 자체를 화면에 쓰는 게 아니라, 매 렌더의 최신 state와 "마지막 저장 시점"
+  // 스냅샷을 비교만 하는 용도라 안전하다.
+  // oxlint-disable-next-line react/refs
+  const dirty = state !== savedStateRef.current;
+  const markSaved = useCallback(() => {
+    savedStateRef.current = state;
+  }, [state]);
+
   const loadDocument = useCallback((input: unknown): boolean => {
     const doc = parseFloorPlanDocument(input);
     if (!doc) return false;
-    dispatch(reset(documentToState(doc)));
+    const nextState = documentToState(doc);
+    dispatch(reset(nextState));
+    savedStateRef.current = nextState; // 방금 불러온 상태 = 새 기준선(미저장 변경 없음)
     setClipboard(null);
     return true;
   }, []);
 
   const newDocument = useCallback(() => {
     dispatch(reset(initialFloorPlanState));
+    savedStateRef.current = initialFloorPlanState;
     setClipboard(null);
     try {
       localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
@@ -710,6 +725,8 @@ export function useFloorPlan() {
     exportDocument,
     loadDocument,
     newDocument,
+    dirty,
+    markSaved,
     addLayer,
     duplicateLayer,
     renameLayer,
