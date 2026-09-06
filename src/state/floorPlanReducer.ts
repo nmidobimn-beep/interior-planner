@@ -7,20 +7,13 @@ import type { Path } from '../types/path';
 import type { TextLabel } from '../types/label';
 import type { Polygon } from '../types/polygon';
 import type { DimensionLine } from '../types/dimension';
+import type { WallMergePayload } from '../core/wallMerge';
 import { createHistoryReducer } from './history';
 
 export type ObjectKind = 'wall' | 'furniture' | 'door' | 'window' | 'outlet' | 'path' | 'label' | 'polygon' | 'dimension';
 export type SelectedObject = { kind: ObjectKind; id: string } | null;
 /** 다중 선택 목록의 항목 하나. null을 허용하지 않는 SelectedObject라고 보면 된다. */
 export type SelectionItem = { kind: ObjectKind; id: string };
-
-/** BL(벽 합치기) 명령이 만들어내는 병합 결과 — 원래 벽들을 지우고 새 벽 하나로 교체한다. */
-export interface MergeWallsPayload {
-  removedWallIds: string[];
-  newWall: Wall;
-  doorPatches: { id: string; offsetMm: number }[];
-  windowPatches: { id: string; offsetMm: number }[];
-}
 
 /** CO(복사) 명령 등에서 여러 객체를 한 번에 추가할 때 쓰는 항목 하나. */
 export type AddManyEntry =
@@ -114,7 +107,7 @@ export type FloorPlanAction =
   | { type: 'DELETE_LAYER'; id: string }
   | { type: 'SET_ACTIVE_LAYER'; id: string }
   | { type: 'MOVE_OBJECT_TO_LAYER'; kind: ObjectKind; id: string; layerId: string }
-  | { type: 'MERGE_WALLS'; payload: MergeWallsPayload }
+  | { type: 'MERGE_WALLS'; payload: WallMergePayload }
   | { type: 'ADD_MANY'; entries: AddManyEntry[] };
 
 function removeFromSelection(selection: SelectionItem[], kind: ObjectKind, id: string): SelectionItem[] {
@@ -373,24 +366,36 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
     }
 
     case 'MERGE_WALLS': {
-      // BL 명령: 선택한 벽들(끝점끼리 이어진 하나의 사슬, 일직선)을 지우고 새 벽 하나로 교체한다.
-      // 그 벽에 달려 있던 문/창문은 사라지지 않고 새 벽으로 옮겨지며, offsetMm도 다시 계산된 값으로
-      // 갱신된다(월드 상의 실제 위치는 그대로 유지). 한 번의 액션이라 Undo 한 번으로 전체 복원된다.
-      const { removedWallIds, newWall, doorPatches, windowPatches } = action.payload;
+      // BL 명령: 일직선 구간은 벽 하나로 합치고(newWalls), 꺾이는 지점(모서리)은 벽 개수를
+      // 줄이지 않는 대신 끝점만 정확히 맞춘다(wallPointPatches). 문/창문은 실제로 다른 벽으로
+      // 대체된 경우에만 그 벽으로 옮겨지며 offsetMm도 다시 계산된 값으로 갱신된다(월드 상의
+      // 실제 위치는 그대로 유지). 한 번의 액션이라 Undo 한 번으로 전체 복원된다.
+      const { removedWallIds, newWalls, wallPointPatches, doorPatches, windowPatches, resultWallIds } = action.payload;
       const removedSet = new Set(removedWallIds);
-      const doorOffsetById = new Map(doorPatches.map((p) => [p.id, p.offsetMm]));
-      const windowOffsetById = new Map(windowPatches.map((p) => [p.id, p.offsetMm]));
+      const pointPatchById = new Map(wallPointPatches.map((p) => [p.id, p]));
+      const doorPatchById = new Map(doorPatches.map((p) => [p.id, p]));
+      const windowPatchById = new Map(windowPatches.map((p) => [p.id, p]));
 
       return {
         ...state,
-        walls: [...state.walls.filter((w) => !removedSet.has(w.id)), newWall],
-        doors: state.doors.map((d) =>
-          removedSet.has(d.wallId) ? { ...d, wallId: newWall.id, offsetMm: doorOffsetById.get(d.id) ?? d.offsetMm } : d,
-        ),
-        windows: state.windows.map((w) =>
-          removedSet.has(w.wallId) ? { ...w, wallId: newWall.id, offsetMm: windowOffsetById.get(w.id) ?? w.offsetMm } : w,
-        ),
-        selection: [{ kind: 'wall', id: newWall.id }],
+        walls: [
+          ...state.walls
+            .filter((w) => !removedSet.has(w.id))
+            .map((w) => {
+              const patch = pointPatchById.get(w.id);
+              return patch ? { ...w, ...(patch.start ? { start: patch.start } : {}), ...(patch.end ? { end: patch.end } : {}) } : w;
+            }),
+          ...newWalls,
+        ],
+        doors: state.doors.map((d) => {
+          const patch = doorPatchById.get(d.id);
+          return patch ? { ...d, wallId: patch.wallId, offsetMm: patch.offsetMm } : d;
+        }),
+        windows: state.windows.map((w) => {
+          const patch = windowPatchById.get(w.id);
+          return patch ? { ...w, wallId: patch.wallId, offsetMm: patch.offsetMm } : w;
+        }),
+        selection: resultWallIds.map((id) => ({ kind: 'wall' as const, id })),
       };
     }
 

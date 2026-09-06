@@ -19,12 +19,12 @@ import {
 } from '../config/constants';
 import { clampOpeningOffset } from '../core/openingGeometry';
 import { wallLengthMm } from '../core/wallGeometry';
+import type { WallMergePayload } from '../core/wallMerge';
 import {
   historyFloorPlanReducer,
   initialFloorPlanState,
   type AddManyEntry,
   type FloorPlanState,
-  type MergeWallsPayload,
   type ObjectKind,
   type SelectedObject,
   type SelectionItem,
@@ -548,7 +548,7 @@ export function useFloorPlan() {
   );
 
   /** BL(벽 합치기) 명령 — core/wallMerge.ts에서 계산한 결과를 그대로 한 액션으로 반영한다. */
-  const mergeWalls = useCallback((payload: MergeWallsPayload) => {
+  const mergeWalls = useCallback((payload: WallMergePayload) => {
     dispatch({ type: 'MERGE_WALLS', payload });
   }, []);
 

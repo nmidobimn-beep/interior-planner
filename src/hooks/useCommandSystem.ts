@@ -177,8 +177,17 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
       appendLog(`병합 불가: ${result.reason}`, 'error');
       return; // 명령은 계속 활성 상태로 둔다 — 사용자가 선택을 조정하고 다시 시도할 수 있게.
     }
-    floorPlan.mergeWalls(result.payload);
-    appendLog(`벽 ${ids.length}개를 하나로 합쳤습니다.`, 'success');
+    const { mergedRunCount, joinedCornerCount } = result.payload;
+    if (mergedRunCount === 0 && joinedCornerCount === 0) {
+      // 바꿀 데이터가 없다(이미 정확히 맞물려 있음) — Undo 기록 없이 안내만 하고 끝낸다.
+      appendLog('이미 모서리가 정확히 맞물려 있어 추가로 정리할 내용이 없습니다.', 'success');
+    } else {
+      floorPlan.mergeWalls(result.payload);
+      const parts: string[] = [];
+      if (mergedRunCount > 0) parts.push(`일직선 구간 ${mergedRunCount}곳을 벽 하나로 합침`);
+      if (joinedCornerCount > 0) parts.push(`모서리 ${joinedCornerCount}곳을 정리함`);
+      appendLog(parts.join(', '), 'success');
+    }
     setMergeWallCandidates(new Set());
     endActiveCommand(false);
     appendLog('명령 종료');
