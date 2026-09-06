@@ -11,7 +11,7 @@ interface LayerPanelProps {
  * (레이어 삭제 시 그 안의 객체는 사라지지 않고 남은 첫 레이어로 옮겨진다).
  */
 export function LayerPanel({ floorPlan }: LayerPanelProps) {
-  const { layers, activeLayerId, setActiveLayer, addLayer, renameLayer, toggleLayerVisibility, deleteLayer } = floorPlan;
+  const { layers, activeLayerId, setActiveLayer, addLayer, duplicateLayer, renameLayer, toggleLayerVisibility, deleteLayer } = floorPlan;
 
   return (
     <div id="layer-panel">
@@ -37,6 +37,17 @@ export function LayerPanel({ floorPlan }: LayerPanelProps) {
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => renameLayer(layer.id, e.target.value)}
             />
+            <button
+              type="button"
+              className="layer-duplicate-button"
+              title="레이어 복사 — 이 레이어의 벽·가구·텍스트를 모두 복제해 새 레이어로 만듭니다"
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateLayer(layer.id);
+              }}
+            >
+              ⧉
+            </button>
             <button
               type="button"
               className="layer-delete-button"

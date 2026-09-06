@@ -544,6 +544,46 @@ export function useFloorPlan() {
     },
     [state.layers.length],
   );
+  /** 레이어 복사: 해당 레이어의 벽/가구/문/창문/콘센트/동선/라벨/다각형/치수선을 전부 복제해
+   * 새 레이어에 담고, 그 새 레이어를 바로 활성 레이어로 전환한다(같은 공간에 같은 가구로
+   * 새 배치안을 만들어 비교하기 위함 — 원본 레이어는 그대로 유지). 문/창문의 wallId는 원본
+   * 벽이 아니라 방금 복제된 새 벽을 가리키도록 다시 연결한다. */
+  const duplicateLayer = useCallback(
+    (layerId: string) => {
+      const source = state.layers.find((l) => l.id === layerId);
+      if (!source) return null;
+
+      const newLayer: Layer = { id: createId(), name: `${source.name} 복사본`, visible: true };
+      const wallIdMap = new Map<string, string>();
+      const entries: AddManyEntry[] = [];
+
+      for (const w of state.walls) {
+        if (w.layerId !== layerId) continue;
+        const newId = createId();
+        wallIdMap.set(w.id, newId);
+        entries.push({ kind: 'wall', data: { ...w, id: newId, layerId: newLayer.id } });
+      }
+      for (const d of state.doors) {
+        if (d.layerId !== layerId) continue;
+        entries.push({ kind: 'door', data: { ...d, id: createId(), layerId: newLayer.id, wallId: wallIdMap.get(d.wallId) ?? d.wallId } });
+      }
+      for (const win of state.windows) {
+        if (win.layerId !== layerId) continue;
+        entries.push({ kind: 'window', data: { ...win, id: createId(), layerId: newLayer.id, wallId: wallIdMap.get(win.wallId) ?? win.wallId } });
+      }
+      for (const f of state.furniture) if (f.layerId === layerId) entries.push({ kind: 'furniture', data: { ...f, id: createId(), layerId: newLayer.id } });
+      for (const o of state.outlets) if (o.layerId === layerId) entries.push({ kind: 'outlet', data: { ...o, id: createId(), layerId: newLayer.id } });
+      for (const p of state.paths) if (p.layerId === layerId) entries.push({ kind: 'path', data: { ...p, id: createId(), layerId: newLayer.id } });
+      for (const l of state.labels) if (l.layerId === layerId) entries.push({ kind: 'label', data: { ...l, id: createId(), layerId: newLayer.id } });
+      for (const poly of state.polygons) if (poly.layerId === layerId) entries.push({ kind: 'polygon', data: { ...poly, id: createId(), layerId: newLayer.id } });
+      for (const dim of state.dimensions) if (dim.layerId === layerId) entries.push({ kind: 'dimension', data: { ...dim, id: createId(), layerId: newLayer.id } });
+
+      dispatch({ type: 'DUPLICATE_LAYER', newLayer, entries });
+      return newLayer;
+    },
+    [state],
+  );
+
   const renameLayer = useCallback((id: string, name: string) => dispatch({ type: 'RENAME_LAYER', id, name }), []);
   const toggleLayerVisibility = useCallback((id: string) => dispatch({ type: 'TOGGLE_LAYER_VISIBILITY', id }), []);
   const deleteLayer = useCallback((id: string) => dispatch({ type: 'DELETE_LAYER', id }), []);
@@ -671,6 +711,7 @@ export function useFloorPlan() {
     loadDocument,
     newDocument,
     addLayer,
+    duplicateLayer,
     renameLayer,
     toggleLayerVisibility,
     deleteLayer,

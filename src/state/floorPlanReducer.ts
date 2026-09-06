@@ -108,7 +108,8 @@ export type FloorPlanAction =
   | { type: 'SET_ACTIVE_LAYER'; id: string }
   | { type: 'MOVE_OBJECT_TO_LAYER'; kind: ObjectKind; id: string; layerId: string }
   | { type: 'MERGE_WALLS'; payload: WallMergePayload }
-  | { type: 'ADD_MANY'; entries: AddManyEntry[] };
+  | { type: 'ADD_MANY'; entries: AddManyEntry[] }
+  | { type: 'DUPLICATE_LAYER'; newLayer: Layer; entries: AddManyEntry[] };
 
 function removeFromSelection(selection: SelectionItem[], kind: ObjectKind, id: string): SelectionItem[] {
   return selection.filter((item) => !(item.kind === kind && item.id === id));
@@ -410,46 +411,60 @@ export function floorPlanReducer(state: FloorPlanState, action: FloorPlanAction)
 
     case 'ADD_MANY': {
       // CO(복사) 명령 등에서 여러 객체를 한 번에 추가한다 — 몇 개를 추가하든 Undo 한 건이다.
-      let next = state;
-      const newSelection: SelectionItem[] = [];
-      for (const entry of action.entries) {
-        switch (entry.kind) {
-          case 'wall':
-            next = { ...next, walls: [...next.walls, entry.data] };
-            break;
-          case 'furniture':
-            next = { ...next, furniture: [...next.furniture, entry.data] };
-            break;
-          case 'door':
-            next = { ...next, doors: [...next.doors, entry.data] };
-            break;
-          case 'window':
-            next = { ...next, windows: [...next.windows, entry.data] };
-            break;
-          case 'outlet':
-            next = { ...next, outlets: [...next.outlets, entry.data] };
-            break;
-          case 'path':
-            next = { ...next, paths: [...next.paths, entry.data] };
-            break;
-          case 'label':
-            next = { ...next, labels: [...next.labels, entry.data] };
-            break;
-          case 'polygon':
-            next = { ...next, polygons: [...next.polygons, entry.data] };
-            break;
-          case 'dimension':
-            next = { ...next, dimensions: [...next.dimensions, entry.data] };
-            break;
-        }
-        newSelection.push({ kind: entry.kind, id: entry.data.id });
-      }
+      const next = distributeEntries(state, action.entries);
+      const newSelection: SelectionItem[] = action.entries.map((entry) => ({ kind: entry.kind, id: entry.data.id }));
       return { ...next, selection: newSelection };
+    }
+
+    case 'DUPLICATE_LAYER': {
+      // 레이어 복사: 새 레이어를 만들고 그 레이어의 객체 복제본을 한 번에 추가한다(Undo 한 건).
+      // 새 레이어를 활성 레이어로 바로 전환하고(자연스럽게 이어서 편집), 이전 선택은 해제한다
+      // (레이어 전환 시 선택 해제하는 기존 규칙과 동일).
+      const withLayer = { ...state, layers: [...state.layers, action.newLayer] };
+      const next = distributeEntries(withLayer, action.entries);
+      return { ...next, activeLayerId: action.newLayer.id, selection: [] };
     }
 
     default:
       return state;
   }
+}
+
+/** ADD_MANY/DUPLICATE_LAYER가 공유하는 항목 분배 로직 — 객체 종류별로 알맞은 배열에 추가한다. */
+function distributeEntries(state: FloorPlanState, entries: AddManyEntry[]): FloorPlanState {
+  let next = state;
+  for (const entry of entries) {
+    switch (entry.kind) {
+      case 'wall':
+        next = { ...next, walls: [...next.walls, entry.data] };
+        break;
+      case 'furniture':
+        next = { ...next, furniture: [...next.furniture, entry.data] };
+        break;
+      case 'door':
+        next = { ...next, doors: [...next.doors, entry.data] };
+        break;
+      case 'window':
+        next = { ...next, windows: [...next.windows, entry.data] };
+        break;
+      case 'outlet':
+        next = { ...next, outlets: [...next.outlets, entry.data] };
+        break;
+      case 'path':
+        next = { ...next, paths: [...next.paths, entry.data] };
+        break;
+      case 'label':
+        next = { ...next, labels: [...next.labels, entry.data] };
+        break;
+      case 'polygon':
+        next = { ...next, polygons: [...next.polygons, entry.data] };
+        break;
+      case 'dimension':
+        next = { ...next, dimensions: [...next.dimensions, entry.data] };
+        break;
+    }
+  }
+  return next;
 }
 
 /**

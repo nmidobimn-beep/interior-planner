@@ -331,6 +331,20 @@
   background: #fff;
 }
 
+.layer-duplicate-button {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.layer-duplicate-button:hover {
+  color: var(--text);
+}
+
 .layer-delete-button {
   border: none;
   background: none;
