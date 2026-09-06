@@ -65,7 +65,18 @@ export function doorSwingGeometry(wall: Wall, door: Door): DoorSwingGeometry {
   const startAngle = Math.atan2(closedEnd.y - hinge.y, closedEnd.x - hinge.x);
   const endAngle = Math.atan2(openEnd.y - hinge.y, openEnd.x - hinge.x);
 
-  return { hinge, closedEnd, openEnd, radius: door.widthMm, startAngle, endAngle, anticlockwise: false };
+  // closedEnd·openEnd 사이 각도는 항상 정확히 90도지만, atan2 값은 (-π, π] 범위로 감겨
+  // 있어서 hingeSide/swingDirection/벽 방향 조합에 따라 (endAngle - startAngle)의 raw
+  // 차이가 +90도가 아니라 -270도(= +90도의 반대 방향으로 감은 값)로 나올 수 있다.
+  // ctx.arc는 anticlockwise가 false면 항상 "각도가 증가하는 방향"으로 스윕하므로, 이때
+  // anticlockwise를 그대로 false로 두면 90도가 아니라 270도짜리 호를 그리게 된다.
+  // 실제 회전 방향(부호)을 정규화한 각도차로 판정해 항상 정확히 90도만 그리도록 한다.
+  let diff = (endAngle - startAngle) % (Math.PI * 2);
+  if (diff > Math.PI) diff -= Math.PI * 2;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  const anticlockwise = diff < 0;
+
+  return { hinge, closedEnd, openEnd, radius: door.widthMm, startAngle, endAngle, anticlockwise };
 }
 
 function findOpeningAtPoint<T extends { wallId: string; offsetMm: number; widthMm: number }>(
