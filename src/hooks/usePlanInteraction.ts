@@ -260,6 +260,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
   const [previewSnapKind, setPreviewSnapKind] = useState<SnapKind>(null);
   const [selectionBox, setSelectionBox] = useState<{ start: Point; end: Point } | null>(null);
   const [polygonDraft, setPolygonDraft] = useState<Point[]>([]);
+  // 시작점→끝점 방식 명령(벽/동선/치수선)에서 마우스로 방향만 잡고 숫자로 정확한 길이를
+  // 입력할 때 쓰는 버퍼. Enter/Space로 확정하면 마우스 방향을 가장 가까운 90도 축으로 스냅해
+  // 그 방향으로 입력한 mm만큼 떨어진 지점을 끝점으로 사용한다.
+  const [lengthDraft, setLengthDraft] = useState('');
 
   const dragState = useRef<DragState | null>(null);
 
@@ -277,13 +281,73 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     setChainStart(null);
     setPreviewPoint(null);
     setPolygonDraft([]);
+    setLengthDraft('');
   }, []);
 
   const endChain = useCallback(() => {
     setChainStart(null);
     setPreviewPoint(null);
     setPolygonDraft([]);
+    setLengthDraft('');
   }, []);
+
+  /** 숫자 직접입력 버퍼에 문자 하나를 추가한다(숫자와 소수점만 허용, 길이는 항상 양수). */
+  const appendLengthDigit = useCallback((ch: string) => {
+    setLengthDraft((prev) => {
+      if (prev.length >= 12) return prev;
+      if (ch === '.' && prev.includes('.')) return prev;
+      if (ch !== '.' && !/^[0-9]$/.test(ch)) return prev;
+      return prev + ch;
+    });
+  }, []);
+
+  const backspaceLengthDigit = useCallback(() => setLengthDraft((prev) => prev.slice(0, -1)), []);
+
+  /** origin 기준 mouseWorld 방향을 가장 가까운 90도 축(0/90/180/270)으로 스냅한 뒤, 그 방향으로
+   * lengthMm만큼 떨어진 지점을 계산한다. */
+  const computeAxisLengthPoint = useCallback((origin: Point, mouseWorld: Point, lengthMm: number): Point => {
+    const angle = Math.atan2(mouseWorld.y - origin.y, mouseWorld.x - origin.x);
+    const snappedAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+    return { x: origin.x + Math.cos(snappedAngle) * lengthMm, y: origin.y + Math.sin(snappedAngle) * lengthMm };
+  }, []);
+
+  /** 숫자 직접입력 버퍼를 확정한다 — 마우스 방향(90도 스냅) + 입력한 mm 길이로 끝점을 만들어
+   * 클릭으로 끝점을 찍은 것과 동일하게 처리한다(입력값이 최우선, 길이 스냅 등은 적용 안 함). */
+  const commitLengthInput = useCallback(() => {
+    const lengthMm = parseFloat(lengthDraft);
+    setLengthDraft('');
+    if (!chainStart || !cursorWorld || !Number.isFinite(lengthMm) || lengthMm <= 0) return;
+    const finalPoint = computeAxisLengthPoint(chainStart, cursorWorld, lengthMm);
+
+    if (activeTool === 'wall') {
+      if (lengthMm < MIN_WALL_LENGTH_MM) return;
+      addWall(chainStart, finalPoint, defaultWallThicknessMm);
+      setChainStart(finalPoint);
+    } else if (activeTool === 'path') {
+      if (lengthMm < MIN_PATH_LENGTH_MM) return;
+      const isCurve = pathShape === 'curve';
+      const controlPoint = isCurve ? defaultControlPoint(chainStart, finalPoint) : undefined;
+      addPath(chainStart, finalPoint, true, isCurve, controlPoint);
+      if (!keepToolActiveRef.current) setActiveTool('select');
+    } else if (activeTool === 'dimension') {
+      if (lengthMm < MIN_PATH_LENGTH_MM) return;
+      addDimension(chainStart, finalPoint, dimensionMode);
+      setActiveTool('select');
+    }
+  }, [
+    lengthDraft,
+    chainStart,
+    cursorWorld,
+    computeAxisLengthPoint,
+    activeTool,
+    addWall,
+    defaultWallThicknessMm,
+    pathShape,
+    addPath,
+    addDimension,
+    dimensionMode,
+    setActiveTool,
+  ]);
 
   /**
    * 지금까지 찍은 다각형 꼭짓점으로 도형을 완성한다(Enter 키, 또는 CAD 커맨드 시스템에서 MU
@@ -1697,6 +1761,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     previewSnapKind,
     selectionBox,
     polygonDraft,
+    lengthDraft,
+    appendLengthDigit,
+    backspaceLengthDigit,
+    commitLengthInput,
     onPointerDown,
     onPointerMove,
     onPointerUp,

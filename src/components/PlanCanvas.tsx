@@ -34,7 +34,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
   const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, onWheel } = viewportApi;
-  const { mergeWallCandidates, tryHandlePointerDown } = commandSystem;
+  const { mergeWallCandidates, trimBaseWallId, tryHandlePointerDown } = commandSystem;
   const {
     visibleWalls: walls,
     visibleFurniture: furniture,
@@ -72,6 +72,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     previewSnapKind,
     selectionBox,
     polygonDraft,
+    lengthDraft,
     cursorWorld,
     onPointerDown,
     onPointerMove,
@@ -148,6 +149,31 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
       drawSnapIndicator(ctx, viewport, previewPoint, previewSnapKind);
     }
 
+    // 그리기 숫자 직접입력 중 — 입력한 mm 값을 커서 옆에 보여준다.
+    if (chainStart && lengthDraft && cursorWorld) {
+      const s = worldToScreen(viewport, cursorWorld);
+      ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = COLORS.dimensionSelected;
+      ctx.fillText(`${lengthDraft}mm`, s.x + 14, s.y - 14);
+    }
+
+    // TR(트림/연장) 명령의 기준 벽 강조 표시
+    if (trimBaseWallId) {
+      const baseWall = walls.find((w) => w.id === trimBaseWallId);
+      if (baseWall) {
+        const start = worldToScreen(viewport, baseWall.start);
+        const end = worldToScreen(viewport, baseWall.end);
+        ctx.strokeStyle = COLORS.multiSelectBounds;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+      }
+    }
+
     if (activeTool === 'polygon' && polygonDraft.length > 0) {
       drawPolygonPreview(ctx, viewport, polygonDraft, cursorWorld);
     }
@@ -209,11 +235,13 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     previewSnapKind,
     selectionBox,
     polygonDraft,
+    lengthDraft,
     cursorWorld,
     defaultWallThicknessMm,
     dimensionMode,
     displayUnit,
     mergeWallCandidates,
+    trimBaseWallId,
   ]);
 
   // CAD 커맨드 시스템(M/R/CO/BL)이 클릭 두 번짜리 진행 중일 때는 그 명령이 먼저 클릭을
@@ -223,7 +251,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     if (e.button === 0) {
       const rect = e.currentTarget.getBoundingClientRect();
       const worldPoint = screenToWorld(viewport, { x: e.clientX - rect.left, y: e.clientY - rect.top });
-      if (tryHandlePointerDown(worldPoint)) return;
+      if (tryHandlePointerDown(worldPoint, e.shiftKey)) return;
     }
     onPointerDown(e);
   };

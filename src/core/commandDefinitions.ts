@@ -236,6 +236,19 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     },
   },
   {
+    command: 'TR',
+    aliases: ['TRIM'],
+    name: '트림/연장',
+    description: '벽 트림/연장 — 기준 벽 클릭 후 자를 벽을 클릭 (Shift: 연장)',
+    category: 'EDIT',
+    repeatable: false,
+    interactive: true,
+    execute: (ctx) => {
+      ctx.log('기준이 될 벽을 클릭하세요.');
+      return true;
+    },
+  },
+  {
     command: 'BL',
     aliases: ['MERGE', 'MERGEWALLS'],
     name: '벽 합치기',

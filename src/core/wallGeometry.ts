@@ -104,6 +104,40 @@ export function projectPointOntoWall(point: Point, wall: Pick<Wall, 'start' | 'e
   };
 }
 
+/** 두 무한 직선(각각 두 점으로 정의)의 교점을 구한다. 평행하면 null. */
+export function lineIntersection(a1: Point, a2: Point, b1: Point, b2: Point): Point | null {
+  const d1x = a2.x - a1.x;
+  const d1y = a2.y - a1.y;
+  const d2x = b2.x - b1.x;
+  const d2y = b2.y - b1.y;
+  const denom = d1x * d2y - d1y * d2x;
+  if (Math.abs(denom) < 1e-9) return null;
+  const t = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / denom;
+  return { x: a1.x + d1x * t, y: a1.y + d1y * t };
+}
+
+export interface WallTrimResult {
+  start: Point;
+  end: Point;
+}
+
+/**
+ * TR(트림/익스텐드): baseWall을 기준으로 targetWall을 자르거나 늘린다. clickPoint에 더 가까운
+ * targetWall의 끝점을 baseWall과의 교점으로 옮긴다.
+ * - extend=false(트림): 교점이 targetWall 구간 안(0~1)에 실제로 있을 때만 적용.
+ * - extend=true(익스텐드): 교점이 존재하기만 하면(평행이 아니면) 구간 밖이어도 적용.
+ */
+export function computeWallTrim(baseWall: Wall, targetWall: Wall, clickPoint: Point, extend: boolean): WallTrimResult | null {
+  const p = lineIntersection(baseWall.start, baseWall.end, targetWall.start, targetWall.end);
+  if (!p) return null;
+  const length = wallLengthMm(targetWall);
+  if (length === 0) return null;
+  const t = projectPointOntoWall(p, targetWall).offsetMm / length;
+  if (!extend && (t < 0 || t > 1)) return null;
+  const nearEnd: WallEndpointKey = distance(clickPoint, targetWall.start) <= distance(clickPoint, targetWall.end) ? 'start' : 'end';
+  return nearEnd === 'start' ? { start: p, end: targetWall.end } : { start: targetWall.start, end: p };
+}
+
 /** 문/창문을 새로 놓을 때: point(mm)가 어느 벽 위에 있는지, 있다면 그 벽 위 offset(mm)까지 함께 찾는다. */
 export function findWallAtPoint(point: Point, walls: Wall[], toleranceMm: number): { wall: Wall; offsetMm: number } | null {
   let best: { wall: Wall; offsetMm: number } | null = null;

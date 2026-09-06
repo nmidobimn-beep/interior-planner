@@ -13,7 +13,7 @@ import {
   type CommandRuntimeContext,
 } from '../core/commandDefinitions';
 import { planWallMerge } from '../core/wallMerge';
-import { hitTestWalls, wallDirectionUnit, wallLengthMm } from '../core/wallGeometry';
+import { computeWallTrim, hitTestWalls, wallDirectionUnit, wallLengthMm } from '../core/wallGeometry';
 import { clampOpeningOffset } from '../core/openingGeometry';
 import { snapAngleDeg, snapPoint } from '../core/snap';
 import { collectSnapCandidates } from '../core/snapPoints';
@@ -83,6 +83,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
   const [activeCommand, setActiveCommand] = useState<ActiveCommandState | null>(null);
   const [clickStep, setClickStep] = useState<ClickStep | null>(null);
   const [mergeWallCandidates, setMergeWallCandidates] = useState<Set<string>>(new Set());
+  const [trimBaseWallId, setTrimBaseWallId] = useState<string | null>(null);
   const [lastRepeatableCommand, setLastRepeatableCommand] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -120,6 +121,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
         interaction.endChain();
         interaction.setKeepToolActive(false);
         if (current.command === 'BL') setMergeWallCandidates(new Set());
+        if (current.command === 'TR') setTrimBaseWallId(null);
         if (current.category === 'DRAW') interaction.setActiveTool('select');
         if (withLog) appendLog('명령 종료');
         return null;
@@ -143,6 +145,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     interaction.setKeepToolActive(false);
     interaction.setActiveTool('select'); // 커서도 '선택' 도구 스타일로 자동 복구됨
     setMergeWallCandidates(new Set());
+    setTrimBaseWallId(null);
     setClickStep(null);
     setActiveCommand(null);
     setBuffer('');
@@ -164,6 +167,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     interaction.setKeepToolActive(false);
     setClickStep(null);
     if (activeCommand.command === 'BL') setMergeWallCandidates(new Set());
+    if (activeCommand.command === 'TR') setTrimBaseWallId(null);
     setActiveCommand(null);
     // interaction 객체 자체는 매 렌더 새로 생성되므로 deps에서 제외하고, 실제로 이 효과가
     // 반응해야 할 값(도구 변경, 활성 명령)만 추적한다.
@@ -540,8 +544,35 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
    * 그대로 처리하게 둔다(요청 19번 — 같은 기능을 중복 구현하지 않는다).
    */
   const tryHandlePointerDown = useCallback(
-    (worldPoint: Point): boolean => {
+    (worldPoint: Point, shiftKey = false): boolean => {
       if (!activeCommand) return false;
+
+      if (activeCommand.command === 'TR') {
+        const hit = hitTestWalls(worldPoint, floorPlan.walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
+        if (!hit) return true;
+        if (!trimBaseWallId) {
+          setTrimBaseWallId(hit.id);
+          appendLog('기준 벽 지정 완료. 자를(또는 연장할) 벽을 클릭하세요. 계속 다른 벽을 클릭할 수 있습니다.');
+          return true;
+        }
+        if (hit.id === trimBaseWallId) {
+          appendLog('기준 벽은 자를 수 없습니다. 다른 벽을 클릭하세요.', 'error');
+          return true;
+        }
+        const baseWall = floorPlan.walls.find((w) => w.id === trimBaseWallId);
+        if (!baseWall) {
+          setTrimBaseWallId(null);
+          return true;
+        }
+        const result = computeWallTrim(baseWall, hit, worldPoint, shiftKey);
+        if (!result) {
+          appendLog('교차점을 찾을 수 없습니다(평행한 벽이거나 구간 밖입니다).', 'error');
+          return true;
+        }
+        floorPlan.updateWall(hit.id, { start: result.start, end: result.end });
+        appendLog(shiftKey ? '벽 연장 완료' : '벽 트림 완료', 'success');
+        return true;
+      }
 
       if (activeCommand.command === 'BL') {
         const hit = hitTestWalls(worldPoint, floorPlan.walls, WALL_HIT_TOLERANCE_PX / viewport.scale);
@@ -621,12 +652,12 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
       computePivot,
       duplicateSelection,
       endActiveCommand,
-      floorPlan.selection,
-      floorPlan.walls,
+      floorPlan,
       interaction,
       moveSelectionByDelta,
       rotateSelectionByAngle,
       snappedWorldPoint,
+      trimBaseWallId,
       viewport.scale,
     ],
   );
@@ -694,6 +725,12 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     [runCommand],
   );
 
+  // 벽/동선/치수선처럼 시작점을 찍고 끝점을 기다리는 중에는 숫자 키를 CAD 명령어가 아니라
+  // "지금 이 길이를 입력 중"으로 처리한다(그리기 숫자 직접입력).
+  const numericEntryActive =
+    interaction.chainStart !== null &&
+    (interaction.activeTool === 'wall' || interaction.activeTool === 'path' || interaction.activeTool === 'dimension');
+
   // 전역 키보드 리스너 — input/textarea 등 텍스트 편집 중에는 아무 것도 하지 않는다.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -706,13 +743,28 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
         return;
       }
 
+      if (numericEntryActive && /^[0-9.]$/.test(e.key)) {
+        e.preventDefault();
+        interaction.appendLengthDigit(e.key);
+        return;
+      }
+
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
+        if (numericEntryActive && interaction.lengthDraft.length > 0) {
+          interaction.commitLengthInput();
+          return;
+        }
         handleExecuteKey();
         return;
       }
 
       if (e.key === 'Backspace') {
+        if (numericEntryActive && interaction.lengthDraft.length > 0) {
+          e.preventDefault();
+          interaction.backspaceLengthDigit();
+          return;
+        }
         if (buffer.length > 0) {
           e.preventDefault();
           setBuffer((b) => b.slice(0, -1));
@@ -733,7 +785,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
         return;
       }
 
-      if (/^[a-zA-Z]$/.test(e.key)) {
+      if (!numericEntryActive && /^[a-zA-Z]$/.test(e.key)) {
         e.preventDefault();
         setBuffer((b) => (b.length < 16 ? b + e.key.toUpperCase() : b));
       }
@@ -741,7 +793,10 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [autocompleteSuggestions.length, buffer, cancelCurrentOperation, handleExecuteKey]);
+    // interaction 객체 자체는 매 렌더 새로 생성되므로 deps에서 제외하고, 실제로 이 효과가
+    // 반응해야 할 값(숫자 입력 버퍼 값)만 추적한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autocompleteSuggestions.length, buffer, cancelCurrentOperation, handleExecuteKey, numericEntryActive, interaction.lengthDraft]);
 
   const helpResults = useMemo(() => {
     const q = helpSearch.trim().toUpperCase();
@@ -786,10 +841,14 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
         return clickStep ? '회전할 각도의 목표 지점을 클릭하세요.' : '회전 기준각 지점을 클릭하세요.';
       case 'BL':
         return `병합할 벽을 클릭해 선택하세요 (현재 ${mergeWallCandidates.size}개). 완료: Space, 취소: Esc.`;
+      case 'TR':
+        return trimBaseWallId
+          ? '자를(또는 Shift+클릭으로 연장할) 벽을 클릭하세요. 취소: Esc.'
+          : '기준이 될 벽을 클릭하세요.';
       default:
         return '';
     }
-  }, [activeCommand, clickStep, interaction.chainStart, interaction.polygonDraft.length, mergeWallCandidates.size]);
+  }, [activeCommand, clickStep, interaction.chainStart, interaction.polygonDraft.length, mergeWallCandidates.size, trimBaseWallId]);
 
   return {
     buffer,
@@ -798,6 +857,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     activeCommandLabel: activeCommand ? `${activeCommand.name} [${activeCommand.command}]` : null,
     prompt,
     mergeWallCandidates,
+    trimBaseWallId,
     collapsed,
     toggleCollapsed: () => setCollapsed((v) => !v),
     helpOpen,
