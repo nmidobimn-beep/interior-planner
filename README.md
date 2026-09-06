@@ -538,3 +538,48 @@ Undo 한 건으로 묶이고, 복사/붙여넣기도 지원한다. 글자 크기
   익스텐드가 갭이 있는 벽을 기준 벽까지 정확히 늘리는지, TR 진행 중 ESC로 취소하면 SELECT로
   복귀하고 벽 상태가 전혀 바뀌지 않는지 확인. 기존 회귀 테스트 16개 파일 128개 체크 전부
   재통과, 콘솔 에러 없음, 빌드·린트 클린.
+
+## Cloudflare 백엔드 + 모바일 가구 등록 (13단계)
+
+도면 프로젝트와 가구 라이브러리를 완전히 독립된 저장소로 분리했다. 기존 로컬(localStorage)
+자동 저장은 그대로 유지되며, 새 기능은 그 위에 얹은 선택 사항이다.
+
+- **D1 스키마**(`migrations/0001_init.sql`): `projects`(id/name/plan_data/타임스탬프),
+  `furniture_library`(id/name/color/width/height/shape_type/memo — project_id 없음, 공용
+  원본), `project_objects`(id/project_id/furniture_id/x/y/rotation/layer_id/object_data —
+  프로젝트에 배치된 가구 하나하나). 프로젝트 삭제 시 `project_objects`만 지우고
+  `furniture_library`는 절대 건드리지 않는다.
+- **API**(`functions/api/*`, Cloudflare Pages Functions): `projects`/`furniture`/`objects`
+  각각 GET·POST·PUT·DELETE. D1 바인딩은 `wrangler.toml`의 `DB`.
+- **가구 배치**: 라이브러리 항목을 클릭하면 `libraryId`로 원본과 연결된 새 `Furniture`
+  객체를 현재 도면에 생성한다(원본 이동 아님). 이동/회전/크기 변경은 이 객체에만 반영되고
+  라이브러리 원본은 바뀌지 않는다. 배치된 객체는 기존 이동/회전/스냅/복사/삭제/레이어/
+  Undo·Redo를 그대로 지원한다(기존 Furniture 파이프라인 재사용, 별도 구현 없음).
+  - `App.tsx`에 `ProjectPanel`(도면 생성/선택/이름수정/삭제/저장)과
+    `CloudFurnitureLibraryPanel`(검색/추가/수정/삭제/배치)을 추가.
+  - 프로젝트 저장 시 `exportDocument()`의 `furniture`는 `project_objects`로,
+    나머지(벽/문/치수선 등)는 `projects.plan_data`로 나눠 저장. 불러오기는 반대로 합쳐서
+    `loadDocument()`(기존 파일 불러오기와 동일 함수) 호출.
+- **모바일 UI**(`MobileFurnitureApp.tsx`): 화면 폭 768px 이하면 평면도 대신 가구 실측
+  등록 화면만 보여준다(이름/색상/가로/세로/메모 입력 + 공용 목록 조회·수정·삭제, 프로젝트
+  선택 불필요). `main.tsx`에서 `matchMedia`로 분기.
+- `vite.config.ts`의 `base`를 `/interior-planner/`에서 상대경로 `./`로 변경 — 같은 빌드
+  산출물을 GitHub Pages(하위 경로)와 Cloudflare Pages(루트 경로) 양쪽에 그대로 쓸 수 있다.
+- Playwright로 검증(신규 18개 체크, `/api/*` 라우트를 목업으로 대체): 프로젝트 생성/선택/전환/
+  전환 시 도면 격리, 같은 가구를 여러 프로젝트에 재배치 가능, 저장 시 `project_objects` 전송
+  내용(furniture_id 연결) 확인, 모바일 등록/수정/삭제 즉시 반영, 데스크탑·모바일 모두 콘솔
+  에러 없음. 기존 회귀 테스트 16개 파일 146개 체크 전부 재통과(로컬 자동 저장 등 기존 기능
+  무영향), 빌드·린트 클린.
+
+### Cloudflare 배포 방법(직접 진행 필요 — 이 환경엔 Cloudflare 계정이 없어 대신 실행 불가)
+
+```bash
+npx wrangler login
+npx wrangler d1 create interior-planner-db   # 출력된 database_id를 wrangler.toml에 채워넣기
+npx wrangler d1 execute interior-planner-db --remote --file=migrations/0001_init.sql
+npm run build
+npx wrangler pages deploy dist --project-name=interior-planner
+```
+Cloudflare Pages 프로젝트 설정에서 D1 바인딩(`DB` → `interior-planner-db`)을 연결해야
+`functions/api/*`가 동작한다. 로컬 개발 중 Functions까지 함께 띄우려면
+`npx wrangler pages dev dist --d1=DB=interior-planner-db` 사용.

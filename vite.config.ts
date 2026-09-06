@@ -3,8 +3,8 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // GitHub Pages는 https://<user>.github.io/interior-planner/ 경로(프로젝트 사이트)로 서빙되므로,
-  // 빌드된 index.html이 참조하는 에셋 경로도 이 하위 경로 기준으로 맞춰야 한다.
-  base: '/interior-planner/',
+  // 상대 경로로 빌드하면 GitHub Pages(하위 경로 /interior-planner/)와 Cloudflare Pages(루트 경로)
+  // 양쪽 모두에서 같은 빌드 산출물을 그대로 쓸 수 있다(클라이언트 라우팅이 없는 SPA라 안전함).
+  base: './',
   plugins: [react()],
 })

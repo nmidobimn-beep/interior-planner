@@ -791,3 +791,207 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* --- 공용 버튼 (프로젝트 패널 / 가구 폼) --- */
+.primary-button {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: #2f6fe0;
+  color: #fff;
+  cursor: pointer;
+}
+.primary-button:hover {
+  background: #255bc0;
+}
+.primary-button:disabled {
+  background: var(--border);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+.secondary-button:hover {
+  background: var(--panel-bg);
+}
+
+/* --- 가구 실측 등록/수정 폼 (모바일 + PC 공용 가구 라이브러리 패널) --- */
+.furniture-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+}
+.furniture-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* --- 프로젝트 패널 --- */
+.project-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.project-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.project-panel-item-button {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-panel-item-button.is-active {
+  border-color: #2f6fe0;
+  background: #eaf1fd;
+  font-weight: 600;
+}
+.project-panel-item-icon {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.project-panel-item-icon:hover {
+  color: var(--text);
+}
+.project-panel-new-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.project-panel-new-row input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.project-panel-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.project-panel-status.is-error {
+  color: #e0554f;
+}
+
+/* --- PC 클라우드 가구 라이브러리 패널 --- */
+.cloud-library-search {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.cloud-library-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+.cloud-library-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cloud-library-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-library-item-size {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- 모바일 가구 실측 등록 화면 --- */
+.mobile-app {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 16px;
+}
+.mobile-app-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.mobile-app-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.mobile-app-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+.mobile-furniture-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mobile-furniture-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.mobile-furniture-card-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.mobile-furniture-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.mobile-furniture-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-furniture-card-size {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.mobile-furniture-card-actions {
+  display: flex;
+  gap: 4px;
+}

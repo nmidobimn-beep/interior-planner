@@ -22,4 +22,7 @@ export interface Furniture {
   color: string;
   memo?: string;
   layerId: string;
+  /** 공용 가구 라이브러리(Cloudflare D1)에서 배치했다면 그 원본 id — 배치 이후 이동/회전/
+   * 크기 변경은 이 객체에만 반영되고 라이브러리 원본은 절대 바뀌지 않는다. */
+  libraryId?: string;
 }
