@@ -21,6 +21,7 @@ import type { UseFloorPlanResult } from '../hooks/useFloorPlan';
 import type { UsePlanInteractionResult } from '../hooks/usePlanInteraction';
 import type { UseFurnitureLibraryResult } from '../hooks/useFurnitureLibrary';
 import { LengthInput } from './LengthInput';
+import { NumberInput } from './NumberInput';
 
 interface PropertiesPanelProps {
   floorPlan: UseFloorPlanResult;
@@ -226,15 +227,10 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
 
         <div className="field-row">
           <label htmlFor="furniture-rotation">회전 (°)</label>
-          <input
+          <NumberInput
             id="furniture-rotation"
-            type="number"
             value={Math.round(item.rotationDeg)}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              if (!Number.isFinite(value)) return;
-              updateFurniture(item.id, { rotationDeg: ((value % 360) + 360) % 360 });
-            }}
+            onCommit={(value) => updateFurniture(item.id, { rotationDeg: ((value % 360) + 360) % 360 })}
           />
         </div>
 
@@ -401,17 +397,12 @@ export function PropertiesPanel({ floorPlan, interaction, furnitureLibrary }: Pr
 
         <div className="field-row">
           <label htmlFor="outlet-count">개수</label>
-          <input
+          <NumberInput
             id="outlet-count"
-            type="number"
             min={MIN_OUTLET_COUNT}
             max={MAX_OUTLET_COUNT}
             value={selectedOutlet.count}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              if (!Number.isFinite(value)) return;
-              updateOutlet(selectedOutlet.id, { count: Math.min(MAX_OUTLET_COUNT, Math.max(MIN_OUTLET_COUNT, value)) });
-            }}
+            onCommit={(value) => updateOutlet(selectedOutlet.id, { count: value })}
           />
         </div>
 

@@ -342,6 +342,96 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     return members.filter((m) => m.kind === kind).map((m) => m.id);
   }, []);
 
+  /**
+   * 다중 선택 그룹을 delta만큼 옮겼을 때, 각 구성원 자신의 기준점(가구는 모서리·변중앙·중심,
+   * 벽/동선/치수선은 시작·끝·중간점, 다각형은 꼭짓점·변중앙·중심 등 — 객체별 XKeyPoints 함수를
+   * 그대로 재사용)을 모두 모은다. 그룹 바운딩 박스 4모서리+중심만 쓰던 기존 방식을 보완해,
+   * "일반 객체처럼" 그룹 안 어떤 객체의 어떤 기준점이든 스냅될 수 있게 한다.
+   */
+  const groupMemberKeyPoints = useCallback(
+    (members: SelectionMemberSnapshot[], delta: Point): Point[] => {
+      const points: Point[] = [];
+      for (const member of members) {
+        if (member.kind === 'furniture') {
+          const live = furniture.find((f) => f.id === member.id);
+          if (live) points.push(...furnitureKeyPoints({ ...live, x: member.x + delta.x, y: member.y + delta.y, rotationDeg: member.rotationDeg }));
+        } else if (member.kind === 'outlet' || member.kind === 'label') {
+          points.push({ x: member.x + delta.x, y: member.y + delta.y });
+        } else if (member.kind === 'path') {
+          const live = paths.find((p) => p.id === member.id);
+          if (live) {
+            points.push(
+              ...pathKeyPoints({
+                ...live,
+                start: { x: member.start.x + delta.x, y: member.start.y + delta.y },
+                end: { x: member.end.x + delta.x, y: member.end.y + delta.y },
+                controlPoint: member.controlPoint
+                  ? { x: member.controlPoint.x + delta.x, y: member.controlPoint.y + delta.y }
+                  : undefined,
+              }),
+            );
+          }
+        } else if (member.kind === 'polygon') {
+          points.push(...polygonKeyPoints({ points: member.points.map((p) => ({ x: p.x + delta.x, y: p.y + delta.y })) }));
+        } else if (member.kind === 'dimension') {
+          points.push(
+            ...dimensionKeyPoints({
+              start: { x: member.start.x + delta.x, y: member.start.y + delta.y },
+              end: { x: member.end.x + delta.x, y: member.end.y + delta.y },
+            }),
+          );
+        } else if (member.kind === 'wall') {
+          points.push(
+            ...wallKeyPoints({
+              start: { x: member.start.x + delta.x, y: member.start.y + delta.y },
+              end: { x: member.end.x + delta.x, y: member.end.y + delta.y },
+            }),
+          );
+        }
+      }
+      return points;
+    },
+    [furniture, paths],
+  );
+
+  /**
+   * 다중 선택(또는 M/CO 명령의 클릭 기반 이동/복사)이 delta만큼 옮겨질 때, 그룹의 바운딩 박스
+   * 기준점 + 구성원 각자의 기준점을 모두 후보로 스냅을 시도해 보정된 delta를 돌려준다.
+   * usePlanInteraction의 마우스 드래그와 useCommandSystem의 M/CO 명령이 이 함수 하나를
+   * 공유해서 쓴다 — 같은 스냅 로직을 두 번 구현하지 않기 위함.
+   *
+   * members는 호출하는 쪽에서 준비한 스냅샷을 그대로 받는다 — 마우스 드래그 중에는 드래그
+   * 시작 시점에 한 번 캡처해둔 것(매 프레임 라이브 데이터로 다시 만들면 이미 옮겨진 중간
+   * 상태를 기준으로 delta가 누적되어 어긋난다), M/CO 명령처럼 드래그가 없는 일회성 스냅은
+   * 그 시점의 현재 선택으로 새로 만든 것을 넘기면 된다.
+   */
+  const computeGroupMoveSnapDelta = useCallback(
+    (members: SelectionMemberSnapshot[], rawDelta: Point): { delta: Point; kind: SnapKind } => {
+      if (members.length === 0) return { delta: rawDelta, kind: null };
+
+      const candidatePoints = snapCandidates({
+        furnitureIds: memberIdsByKind(members, 'furniture'),
+        pathIds: memberIdsByKind(members, 'path'),
+        labelIds: memberIdsByKind(members, 'label'),
+        polygonIds: memberIdsByKind(members, 'polygon'),
+        dimensionIds: memberIdsByKind(members, 'dimension'),
+        wallIds: memberIdsByKind(members, 'wall'),
+      });
+
+      const items: SelectionItem[] = members.map((m) => ({ kind: m.kind, id: m.id }));
+      const bounds = computeSelectionBounds(items, { furniture, outlets, paths, labels, polygons, dimensions });
+      const movingKeyPoints = [
+        ...(bounds ? selectionKeyPoints(bounds).map((p) => ({ x: p.x + rawDelta.x, y: p.y + rawDelta.y })) : []),
+        ...groupMemberKeyPoints(members, rawDelta),
+      ];
+
+      const groupSnap = snapGroupDelta(movingKeyPoints, candidatePoints, viewport.scale, snapEnabled);
+      if (!groupSnap.kind) return { delta: rawDelta, kind: null };
+      return { delta: { x: rawDelta.x + groupSnap.delta.x, y: rawDelta.y + groupSnap.delta.y }, kind: groupSnap.kind };
+    },
+    [snapCandidates, memberIdsByKind, furniture, outlets, paths, labels, polygons, dimensions, groupMemberKeyPoints, viewport.scale, snapEnabled],
+  );
+
   const selectSingleItem = useCallback(
     (item: SelectionItem) => {
       if (item.kind === 'furniture') selectFurniture(item.id);
@@ -1092,27 +1182,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
       if (drag?.type === 'moveSelection') {
         const rawDelta = { x: worldRaw.x - drag.grabWorld.x, y: worldRaw.y - drag.grabWorld.y };
 
-        // 그룹 전체를 감싸는(회전 반영) 바운딩 박스의 모서리 4개 + 중심을 스냅 후보 지점으로 써서,
-        // 그룹 안 어느 한 지점이라도 다른 객체에 붙을 수 있게 한다(요청 23번: 성능을 위해
-        // 우선 바운딩 박스 기준점만 사용).
-        const candidatePoints = snapCandidates({
-          furnitureIds: memberIdsByKind(drag.members, 'furniture'),
-          pathIds: memberIdsByKind(drag.members, 'path'),
-          labelIds: memberIdsByKind(drag.members, 'label'),
-          polygonIds: memberIdsByKind(drag.members, 'polygon'),
-          dimensionIds: memberIdsByKind(drag.members, 'dimension'),
-          wallIds: memberIdsByKind(drag.members, 'wall'),
-        });
-        let finalDelta = rawDelta;
-        let snapKind: SnapKind = null;
-        if (drag.initialBounds) {
-          const movingKeyPoints = selectionKeyPoints(drag.initialBounds).map((p) => ({ x: p.x + rawDelta.x, y: p.y + rawDelta.y }));
-          const groupSnap = snapGroupDelta(movingKeyPoints, candidatePoints, viewport.scale, snapEnabled);
-          if (groupSnap.kind) {
-            finalDelta = { x: rawDelta.x + groupSnap.delta.x, y: rawDelta.y + groupSnap.delta.y };
-            snapKind = groupSnap.kind;
-          }
-        }
+        // 그룹의 바운딩 박스 기준점 + 구성원 각자의 기준점(가구 모서리, 벽/동선 시작·끝점 등)을
+        // 모두 후보로 스냅한다 — 일반 단일 객체 이동과 같은 방식(공통 함수 재사용). drag.members는
+        // 드래그 시작 시점에 캡처된 원본 스냅샷이므로 매 프레임 다시 만들지 않고 그대로 쓴다.
+        const { delta: finalDelta, kind: snapKind } = computeGroupMoveSnapDelta(drag.members, rawDelta);
 
         for (const member of drag.members) {
           if (member.kind === 'furniture') {
@@ -1226,10 +1299,10 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     [
       activeTool,
       chainStart,
+      computeGroupMoveSnapDelta,
       doors,
       furniture,
       getScreenPoint,
-      memberIdsByKind,
       panBy,
       paths,
       polygons,
@@ -1357,6 +1430,110 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     [dimensions, doors, furniture, labels, outlets, paths, polygons, walls, windows],
   );
 
+  /**
+   * ESC/우클릭 등 "지금 하던 작업을 취소"할 때, 마우스 드래그가 진행 중이었다면(이동/회전/
+   * 끝점 드래그/영역 선택 등) 그 객체를 드래그 시작 시점 상태로 되돌리고 드래그를 끝낸다.
+   * 각 드래그가 시작될 때 캡처해둔 `original`(또는 다중 선택의 `members`)을 그대로 다시
+   * 써서(transient) 되돌리므로 Undo 기록은 전혀 남지 않는다 — 애초에 없던 일처럼 취급한다.
+   */
+  const cancelDragInProgress = useCallback(() => {
+    const drag = dragState.current;
+    if (!drag) return;
+
+    switch (drag.type) {
+      case 'pan':
+      case 'boxSelect':
+        break; // 되돌릴 객체 데이터가 없음(순수 화면 상태)
+      case 'moveWall':
+      case 'endpointDrag':
+        updateWall(drag.wallId, { start: drag.original.start, end: drag.original.end }, true);
+        break;
+      case 'moveFurniture':
+        updateFurniture(drag.furnitureId, { x: drag.original.x, y: drag.original.y }, true);
+        break;
+      case 'rotateFurniture':
+        updateFurniture(drag.furnitureId, { rotationDeg: drag.originalRotationDeg }, true);
+        break;
+      case 'moveDoor':
+        updateDoor(drag.doorId, { offsetMm: drag.originalOffsetMm }, true);
+        break;
+      case 'moveWindow':
+        updateWindow(drag.windowId, { offsetMm: drag.originalOffsetMm }, true);
+        break;
+      case 'moveOutlet':
+        updateOutlet(drag.outletId, { x: drag.original.x, y: drag.original.y }, true);
+        break;
+      case 'movePath':
+        updatePath(drag.pathId, { start: drag.original.start, end: drag.original.end, controlPoint: drag.original.controlPoint }, true);
+        break;
+      case 'pathEndpointDrag':
+        updatePath(drag.pathId, drag.key === 'start' ? { start: drag.original } : { end: drag.original }, true);
+        break;
+      case 'curveControlDrag':
+        updatePath(drag.pathId, { controlPoint: drag.original }, true);
+        break;
+      case 'moveLabel':
+        updateLabel(drag.labelId, { x: drag.original.x, y: drag.original.y }, true);
+        break;
+      case 'movePolygon':
+        updatePolygon(drag.polygonId, { points: drag.original.points }, true);
+        break;
+      case 'rotatePolygon':
+        updatePolygon(drag.polygonId, { points: drag.original }, true);
+        break;
+      case 'polygonVertexDrag': {
+        const poly = polygons.find((p) => p.id === drag.polygonId);
+        if (poly) {
+          updatePolygon(drag.polygonId, { points: poly.points.map((p, i) => (i === drag.vertexIndex ? drag.original : p)) }, true);
+        }
+        break;
+      }
+      case 'moveDimension':
+        updateDimension(drag.dimensionId, { start: drag.original.start, end: drag.original.end }, true);
+        break;
+      case 'dimensionEndpointDrag':
+        updateDimension(drag.dimensionId, drag.key === 'start' ? { start: drag.original } : { end: drag.original }, true);
+        break;
+      case 'moveSelection':
+      case 'rotateSelection':
+        for (const member of drag.members) {
+          if (member.kind === 'furniture') {
+            updateFurniture(member.id, { x: member.x, y: member.y, rotationDeg: member.rotationDeg }, true);
+          } else if (member.kind === 'outlet') {
+            updateOutlet(member.id, { x: member.x, y: member.y }, true);
+          } else if (member.kind === 'label') {
+            updateLabel(member.id, { x: member.x, y: member.y }, true);
+          } else if (member.kind === 'path') {
+            updatePath(member.id, { start: member.start, end: member.end, controlPoint: member.controlPoint }, true);
+          } else if (member.kind === 'polygon') {
+            updatePolygon(member.id, { points: member.points }, true);
+          } else if (member.kind === 'dimension') {
+            updateDimension(member.id, { start: member.start, end: member.end }, true);
+          } else if (member.kind === 'wall') {
+            updateWall(member.id, { start: member.start, end: member.end }, true);
+          }
+        }
+        break;
+    }
+
+    discardTransientEdit();
+    dragState.current = null;
+    setSelectionBox(null);
+    setPreviewSnapKind(null);
+  }, [
+    discardTransientEdit,
+    polygons,
+    updateDimension,
+    updateDoor,
+    updateFurniture,
+    updateLabel,
+    updateOutlet,
+    updatePath,
+    updatePolygon,
+    updateWall,
+    updateWindow,
+  ]);
+
   const finishBoxSelect = useCallback(
     (drag: Extract<DragState, { type: 'boxSelect' }>, endWorld: Point) => {
       const dragDistanceMm = distance(drag.startWorld, endWorld);
@@ -1412,20 +1589,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     if (!dragState.current) setPreviewPoint(null);
   }, []);
 
-  const onContextMenu = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      if (activeTool === 'wall' || activeTool === 'polygon') endChain();
-    },
-    [activeTool, endChain],
-  );
+  // 우클릭(컨텍스트 메뉴)도 ESC와 똑같이 cancelCurrentOperation()으로 통일한다 — PlanCanvas가
+  // commandSystem.cancelCurrentOperation을 직접 연결하므로 여기서는 따로 두지 않는다.
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLCanvasElement>) => {
-      if (e.key === 'Escape') {
-        endChain();
-        return;
-      }
+      // ESC는 useCommandSystem의 전역 키보드 리스너가 cancelCurrentOperation() 하나로 처리한다
+      // (캔버스 포커스 여부와 무관하게 항상 같은 동작이어야 하므로 여기서 따로 구현하지 않는다).
       if (e.key === 'Enter' && activeTool === 'polygon' && polygonDraft.length >= MIN_POLYGON_VERTICES) {
         e.preventDefault();
         completePolygonDraft();
@@ -1459,7 +1629,7 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
           break;
       }
     },
-    [activeTool, completePolygonDraft, copySelected, deleteSelected, endChain, pasteClipboard, polygonDraft, redo, undo],
+    [activeTool, completePolygonDraft, copySelected, deleteSelected, pasteClipboard, polygonDraft, redo, undo],
   );
 
   return {
@@ -1490,11 +1660,13 @@ export function usePlanInteraction({ viewport, panBy, floorPlan }: UsePlanIntera
     onPointerMove,
     onPointerUp,
     onPointerLeave,
-    onContextMenu,
     onKeyDown,
     endChain,
     completePolygonDraft,
     setKeepToolActive,
+    buildSelectionSnapshot,
+    computeGroupMoveSnapDelta,
+    cancelDragInProgress,
   };
 }
 

@@ -77,7 +77,6 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     onPointerMove,
     onPointerUp,
     onPointerLeave,
-    onContextMenu,
     onKeyDown,
   } = interaction;
 
@@ -229,6 +228,13 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
     onPointerDown(e);
   };
 
+  // 우클릭은 ESC와 완전히 같은 동작(cancelCurrentOperation)으로 통일한다 — 진행 중이던 모든
+  // 작업(그리기/이동/회전/복사/벽 병합/영역 선택 등)을 취소하고 선택 도구로 돌아간다.
+  const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    commandSystem.cancelCurrentOperation();
+  };
+
   return (
     <div ref={containerRef} className="plan-canvas-container">
       <canvas
@@ -239,7 +245,7 @@ export function PlanCanvas({ viewportApi, floorPlan, interaction, commandSystem,
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerLeave}
-        onContextMenu={onContextMenu}
+        onContextMenu={handleContextMenu}
         onKeyDown={onKeyDown}
       />
     </div>

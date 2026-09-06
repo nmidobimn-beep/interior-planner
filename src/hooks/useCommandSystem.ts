@@ -129,6 +129,26 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     [appendLog, interaction],
   );
 
+  /**
+   * ESC와 우클릭이 공유하는 단 하나의 취소 로직. 지금 진행 중이던 모든 것 —
+   * 벽/도형/문/창문/콘센트 생성, 다각형·동선 작성, 이동/회전/복사, 벽 병합, 영역 선택, 그 밖의
+   * 활성 명령 — 을 예외 없이 취소하고 항상 기본 '선택' 상태로 되돌린다. 완료된 정상 종료
+   * (endActiveCommand)와 달리, 진행 중이던 마우스 드래그까지 원래 상태로 되돌리고(미완성
+   * 객체/임시 도형은 애초에 커밋된 적이 없으므로 자연히 사라짐) Undo 기록은 전혀 남기지 않는다.
+   */
+  const cancelCurrentOperation = useCallback(() => {
+    const hadActiveCommand = activeCommand !== null;
+    interaction.cancelDragInProgress(); // 진행 중인 마우스 드래그(이동/회전/영역선택 등)를 원상복구
+    interaction.endChain(); // 벽/동선/치수선 체인, 다각형 작성 중단(미완성 점 버림)
+    interaction.setKeepToolActive(false);
+    interaction.setActiveTool('select'); // 커서도 '선택' 도구 스타일로 자동 복구됨
+    setMergeWallCandidates(new Set());
+    setClickStep(null);
+    setActiveCommand(null);
+    setBuffer('');
+    if (hadActiveCommand) appendLog('작업을 취소했습니다.');
+  }, [activeCommand, appendLog, interaction]);
+
   // 사용자가 명령어 대신 툴바 버튼을 눌러 도구를 직접 바꾼 경우, 명령 시스템 쪽 상태(활성 명령·
   // "도구 유지" 플래그)가 그대로 남아 어긋나지 않도록 함께 정리한다 — 안 그러면 예를 들어 B
   // 명령으로 반복 배치 모드에 들어간 뒤 툴바에서 다른 도구를 누르면, 다음에 툴바로 가구를 하나
@@ -531,12 +551,22 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
       }
 
       if (activeCommand.command === 'M' || activeCommand.command === 'CO') {
-        const point = snappedWorldPoint(worldPoint);
         if (!clickStep) {
+          // 기준점은 임의의 위치를 잡는 단계라 일반 포인트 스냅(끝점/격자)이면 충분하다.
+          const point = snappedWorldPoint(worldPoint);
           setClickStep({ basePoint: point });
           appendLog(`기준점 지정: (${Math.round(point.x)}, ${Math.round(point.y)})`);
         } else {
-          const delta = { x: point.x - clickStep.basePoint.x, y: point.y - clickStep.basePoint.y };
+          // 목적지는 옮겨질 객체 자신의 기준점(모서리·중간점 등)이 다른 객체에 맞물리도록
+          // 마우스 드래그 이동과 같은 방식으로 스냅한다(공통 함수 재사용). 맞는 후보가 없으면
+          // 기존처럼 클릭 지점 자체를 격자/포인트 스냅한 결과로 대체한다.
+          const rawDelta = { x: worldPoint.x - clickStep.basePoint.x, y: worldPoint.y - clickStep.basePoint.y };
+          const members = interaction.buildSelectionSnapshot(floorPlan.selection);
+          const groupSnap = interaction.computeGroupMoveSnapDelta(members, rawDelta);
+          const fallbackPoint = snappedWorldPoint(worldPoint);
+          const delta = groupSnap.kind
+            ? groupSnap.delta
+            : { x: fallbackPoint.x - clickStep.basePoint.x, y: fallbackPoint.y - clickStep.basePoint.y };
           if (activeCommand.command === 'M') {
             moveSelectionByDelta(floorPlan.selection, delta);
             appendLog(`이동 완료 (Δx ${Math.round(delta.x)}mm, Δy ${Math.round(delta.y)}mm)`, 'success');
@@ -587,7 +617,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
       endActiveCommand,
       floorPlan.selection,
       floorPlan.walls,
-      interaction.snapEnabled,
+      interaction,
       moveSelectionByDelta,
       rotateSelectionByAngle,
       snappedWorldPoint,
@@ -665,16 +695,8 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
       if (e.ctrlKey || e.metaKey || e.altKey) return; // 기존 Ctrl+C/V/Z/Y 등과 충돌하지 않게 그대로 통과
 
       if (e.key === 'Escape') {
-        if (buffer) {
-          setBuffer('');
-          return;
-        }
-        if (activeCommand) {
-          e.preventDefault();
-          endActiveCommand();
-          return;
-        }
-        interaction.endChain();
+        e.preventDefault();
+        cancelCurrentOperation();
         return;
       }
 
@@ -713,7 +735,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeCommand, autocompleteSuggestions.length, buffer, endActiveCommand, handleExecuteKey, interaction]);
+  }, [autocompleteSuggestions.length, buffer, cancelCurrentOperation, handleExecuteKey]);
 
   const helpResults = useMemo(() => {
     const q = helpSearch.trim().toUpperCase();
@@ -780,7 +802,7 @@ export function useCommandSystem({ interaction, floorPlan, viewport }: UseComman
     autocompleteSuggestions,
     autocompleteIndex: selectedAutocompleteIndex,
     runCommandById,
-    cancelActiveCommand: () => endActiveCommand(),
+    cancelCurrentOperation,
     tryHandlePointerDown,
   };
 }
